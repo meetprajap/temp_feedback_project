@@ -47,7 +47,8 @@ export default function FeedbackModal({ selectedCourse, onClose, onSubmit, isMin
         <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
            <div>
              <h3 className="text-xl font-extrabold text-slate-800">Submit Feedback</h3>
-             <p className="text-slate-500 text-sm">{selectedCourse.name}</p>
+             <p className="text-slate-500 text-sm">{selectedCourse.courseName || selectedCourse.name}</p>
+             <p className="text-slate-400 text-xs mt-1">Teacher: {selectedCourse.teacherName || selectedCourse.faculty}</p>
            </div>
            <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors" disabled={isMining}>
              <X className="w-6 h-6 text-slate-400" />

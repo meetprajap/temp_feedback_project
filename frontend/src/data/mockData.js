@@ -5,8 +5,8 @@ export const COURSES = [
 ];
 
 export const INITIAL_BLOCKS = [
-  { id: 1, hash: '0x7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069', prevHash: '0x00...00', studentHash: '0x99a...c1', course: 'CS101', rating: 18, timestamp: '2023-10-24 10:00' },
-  { id: 2, hash: '0x3c21a4f32b1c6d9e8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3', prevHash: '0x7f...69', studentHash: '0x44b...d2', course: 'CS102', rating: 16, timestamp: '2023-10-25 14:30' },
+  { id: 1, Name: 'Jaimin Raval', hash: '0x7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069', prevHash: '0x00...00', studentHash: '0x99a...c1', course: 'CS101', rating: 18, timestamp: '2023-10-24 10:00' },
+  { id: 2, Name: 'Smit Raval', hash: '0x3c21a4f32b1c6d9e8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3', prevHash: '0x7f...69', studentHash: '0x44b...d2', course: 'CS102', rating: 16, timestamp: '2023-10-25 14:30' },
 ];
 
 export const FACULTY_STATS = [

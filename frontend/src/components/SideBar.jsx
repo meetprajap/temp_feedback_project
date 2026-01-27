@@ -2,9 +2,9 @@ import React from "react";
 import {
   Hexagon,
   LayoutDashboard,
-  Layers,
-  TrendingUp,
   LogOut,
+  BookOpen,
+  CheckCircle,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -20,7 +20,7 @@ export default function Sidebar({
           <Hexagon className="w-6 h-6 text-white" />
         </div>
         <span className="font-extrabold text-2xl tracking-tight text-white">
-          Block<span className="text-indigo-400">Feed</span>
+          Feed<span className="text-indigo-400">lith</span>
         </span>
       </div>
 
@@ -44,26 +44,26 @@ export default function Sidebar({
         {user.role === "admin" && (
           <>
             <button
-              onClick={() => setCurrentView("explorer")}
+              onClick={() => setCurrentView("courses")}
               className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all duration-200 group ${
-                currentView === "explorer"
+                currentView === "courses"
                   ? "bg-indigo-600 shadow-lg shadow-indigo-900/20 text-white"
                   : "text-slate-400 hover:bg-slate-800 hover:text-white"
               }`}
             >
-              <Layers className="w-5 h-5" />
-              <span className="font-medium">Ledger Explorer</span>
+              <BookOpen className="w-5 h-5" />
+              <span className="font-medium">Course Management</span>
             </button>
             <button
-              onClick={() => setCurrentView("analytics")}
+              onClick={() => setCurrentView("feedbackReport")}
               className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all duration-200 group ${
-                currentView === "analytics"
+                currentView === "feedbackReport"
                   ? "bg-indigo-600 shadow-lg shadow-indigo-900/20 text-white"
                   : "text-slate-400 hover:bg-slate-800 hover:text-white"
               }`}
             >
-              <TrendingUp className="w-5 h-5" />
-              <span className="font-medium">Smart Analytics</span>
+              <CheckCircle className="w-5 h-5" />
+              <span className="font-medium">Feedback Report</span>
             </button>
           </>
         )}

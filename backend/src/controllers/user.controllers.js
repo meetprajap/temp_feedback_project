@@ -1,0 +1,321 @@
+import { User } from '../models/user.model.js';
+import ApiError from '../utils/ApiError.js';
+import ApiResponse from '../utils/ApiResponse.js';
+import requestHandler from '../utils/asyncHandler.js';
+
+// Email validation pattern: starts with 23 and ends with @ddu.ac.in
+const validateDDUEmail = (email) => {
+  const emailPattern = /^23[a-zA-Z0-9]*@ddu\.ac\.in$/;
+  return emailPattern.test(email);
+};
+
+// Register User - Students only (email format: 23*@ddu.ac.in)
+const registerUser = requestHandler(async (req, res) => {
+  // Get user data from frontend
+  const { fullName, email, password, confirmPassword, department, walletAddress } = req.body;
+  
+  // Validate all fields are provided
+  if (!fullName?.trim() || !email?.trim() || !password?.trim() || !confirmPassword?.trim() || !department?.trim()) {
+    throw new ApiError(400, "All fields including department are required");
+  }
+  
+  // Validate email format (must start with 23 and end with @ddu.ac.in)
+  if (!validateDDUEmail(email)) {
+    throw new ApiError(400, "Invalid email. Email must start with '23' and end with '@ddu.ac.in' (e.g., 23xxxxx@ddu.ac.in)");
+  }
+  
+  // Validate password length
+  if (password.length < 6) {
+    throw new ApiError(400, "Password must be at least 6 characters long");
+  }
+  
+  // Validate passwords match
+  if (password !== confirmPassword) {
+    throw new ApiError(400, "Passwords do not match");
+  }
+  
+  // Validate department
+  const validDepartments = ['CE', 'IT', 'EC', 'ME', 'Civil'];
+  if (!validDepartments.includes(department)) {
+    throw new ApiError(400, `Invalid department. Must be one of: ${validDepartments.join(', ')}`);
+  }
+  
+  // Check if user already exists
+  const existedUser = await User.findOne({ email });
+  
+  if (existedUser) {
+    throw new ApiError(409, "User with this email already exists");
+  }
+  
+  // Create new user object
+  const user = await User.create({
+    fullName: fullName.trim(),
+    email: email.trim().toLowerCase(),
+    password: password,
+    department: department.toUpperCase(),
+    walletAddress: walletAddress || null
+  });
+  
+  // Get created user without password and refreshToken
+  const createdUser = await User.findById(user._id).select("-password -refreshToken");
+  
+  if (!createdUser) {
+    throw new ApiError(500, "Something went wrong while registering the user");
+  }
+  
+  // Return success response
+  return res.status(201).json(
+    new ApiResponse(201, createdUser, "User registered successfully")
+  );
+});
+
+// Login User
+const loginUser = requestHandler(async (req, res) => {
+  // Get email, password, and optional adminKey from frontend
+  const { email, password, adminKey } = req.body;
+  
+  // Validate fields are provided
+  if (!email?.trim() || !password?.trim()) {
+    throw new ApiError(400, "Email and password are required");
+  }
+  
+  // Admin key for simple admin authentication
+  const ADMIN_KEY = "admin123"; // Simple admin key
+  
+  // Find user by email
+  const user = await User.findOne({ email: email.toLowerCase() });
+  
+  if (!user) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+  
+  // Check if password is correct
+  const isPasswordValid = await user.isPasswordCorrect(password);
+  
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+  
+  // Check if admin key is provided and valid
+  if (adminKey) {
+    if (adminKey === ADMIN_KEY) {
+      user.role = "admin";
+      await user.save({ validateBeforeSave: false });
+    } else {
+      throw new ApiError(401, "Invalid admin key");
+    }
+  }
+  
+  // Generate tokens
+  const accessToken = user.generateAccessToken();
+  const refreshToken = user.generateRefreshToken();
+  
+  // Update refresh token in database
+  user.refreshToken = refreshToken;
+  await user.save({ validateBeforeSave: false });
+  
+  // Get user without password and refreshToken
+  const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+  
+  // Set cookie options
+  const cookieOptions = {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    maxAge: 24 * 60 * 60 * 1000 // 1 day
+  };
+  
+  // Return response with tokens in cookies
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, cookieOptions)
+    .cookie("refreshToken", refreshToken, cookieOptions)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          user: loggedInUser,
+          accessToken: accessToken,
+          refreshToken: refreshToken
+        },
+        "User logged in successfully"
+      )
+    );
+});
+
+// Logout User
+const logoutUser = requestHandler(async (req, res) => {
+  // Clear refresh token from database
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $unset: { refreshToken: 1 }
+    },
+    { new: true }
+  );
+  
+  // Clear cookies
+  const cookieOptions = {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict"
+  };
+  
+  return res
+    .status(200)
+    .clearCookie("accessToken", cookieOptions)
+    .clearCookie("refreshToken", cookieOptions)
+    .json(new ApiResponse(200, {}, "User logged out successfully"));
+});
+
+// Check if student has submitted feedback for a course
+const checkFeedbackStatus = requestHandler(async (req, res) => {
+  const { courseId } = req.params;
+  const userId = req.user._id;
+
+  const user = await User.findById(userId);
+  
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Check if feedback already submitted for this course
+  const feedbackExists = user.feedbackSubmissions.some(
+    submission => submission.courseId === parseInt(courseId)
+  );
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { submitted: feedbackExists }, "Feedback status retrieved"));
+});
+
+// Get all feedback submissions for a student
+const getStudentFeedbackStatus = requestHandler(async (req, res) => {
+  const userId = req.user._id;
+
+  const user = await User.findById(userId);
+  
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { feedbackSubmissions: user.feedbackSubmissions }, "Student feedback status retrieved"));
+});
+
+// Mark feedback as submitted for a course
+const submitFeedbackTracking = requestHandler(async (req, res) => {
+  const { courseId, courseName, feedbackTypes, teacherId } = req.body;
+  const userId = req.user._id;
+
+  if (!courseId || !courseName) {
+    throw new ApiError(400, "courseId and courseName are required");
+  }
+
+  const user = await User.findById(userId);
+  
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Check if feedback already submitted for this course
+  const feedbackExists = user.feedbackSubmissions.some(
+    submission => submission.courseId === parseInt(courseId)
+  );
+
+  if (feedbackExists) {
+    throw new ApiError(409, "You have already submitted feedback for this course");
+  }
+
+  // Add feedback submission tracking to database
+  user.feedbackSubmissions.push({
+    courseId: parseInt(courseId),
+    courseName: courseName,
+    teaching: feedbackTypes?.teaching || false,
+    communication: feedbackTypes?.communication || false,
+    fairness: feedbackTypes?.fairness || false,
+    engagement: feedbackTypes?.engagement || false,
+    submittedAt: new Date()
+  });
+
+  await user.save();
+
+  return res
+    .status(201)
+    .json(new ApiResponse(201, { feedbackSubmission: user.feedbackSubmissions }, "Feedback tracking saved successfully"));
+});
+
+// Get all students who submitted feedback for a course (Admin)
+const getCourseFeedbackStatus = requestHandler(async (req, res) => {
+  const { courseId } = req.params;
+
+  if (!courseId) {
+    throw new ApiError(400, "courseId is required");
+  }
+
+  // Find all users who submitted feedback for this course
+  const students = await User.find({
+    "feedbackSubmissions.courseId": parseInt(courseId)
+  }).select("fullName email branch feedbackSubmissions");
+
+  // Extract only the feedback submissions for this course
+  const feedbackData = students.map(student => {
+    const submission = student.feedbackSubmissions.find(
+      sub => sub.courseId === parseInt(courseId)
+    );
+    return {
+      studentId: student._id,
+      studentName: student.fullName,
+      studentEmail: student.email,
+      studentBranch: student.branch,
+      courseName: submission.courseName,
+      submittedAt: submission.submittedAt,
+      feedbackTypes: {
+        teaching: submission.teaching,
+        communication: submission.communication,
+        fairness: submission.fairness,
+        engagement: submission.engagement
+      }
+    };
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { 
+      courseId: parseInt(courseId), 
+      totalSubmissions: feedbackData.length,
+      submissions: feedbackData 
+    }, "Course feedback submissions retrieved"));
+});
+
+// Get feedback submission status for all courses (Admin)
+const getAllFeedbackStatus = requestHandler(async (req, res) => {
+  // Get all students with their feedback submissions
+  const students = await User.find().select("fullName email branch feedbackSubmissions");
+
+  const feedbackStatus = students.map(student => ({
+    studentId: student._id,
+    studentName: student.fullName,
+    studentEmail: student.email,
+    studentBranch: student.branch,
+    submittedCount: student.feedbackSubmissions.length,
+    submissions: student.feedbackSubmissions.map(sub => ({
+      courseId: sub.courseId,
+      courseName: sub.courseName,
+      submittedAt: sub.submittedAt,
+      feedbackTypes: {
+        teaching: sub.teaching,
+        communication: sub.communication,
+        fairness: sub.fairness,
+        engagement: sub.engagement
+      }
+    }))
+  }));
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { students: feedbackStatus }, "All feedback submissions retrieved"));
+});
+
+export { registerUser, loginUser, logoutUser, checkFeedbackStatus, getStudentFeedbackStatus, submitFeedbackTracking, getCourseFeedbackStatus, getAllFeedbackStatus }; 
