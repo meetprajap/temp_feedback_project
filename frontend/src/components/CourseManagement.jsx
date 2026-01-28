@@ -24,8 +24,9 @@ export default function CourseManagement() {
   const [formData, setFormData] = useState({
     courseId: "",
     courseName: "",
-    teacherName: "",
+    teachers: [{ id: "", name: "" }],
     branch: "",
+    courseTime: "",
   });
 
   // Fetch all courses
@@ -61,14 +62,50 @@ export default function CourseManagement() {
     setError("");
   };
 
+  // Handle teacher input change
+  const handleTeacherChange = (index, field, value) => {
+    const newTeachers = [...formData.teachers];
+    newTeachers[index] = {
+      ...newTeachers[index],
+      [field]: value,
+    };
+    setFormData((prev) => ({
+      ...prev,
+      teachers: newTeachers,
+    }));
+    setError("");
+  };
+
+  // Add new teacher input
+  const addTeacherField = () => {
+    setFormData((prev) => ({
+      ...prev,
+      teachers: [...prev.teachers, { id: "", name: "" }],
+    }));
+  };
+
+  // Remove teacher input
+  const removeTeacherField = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      teachers: prev.teachers.filter((_, i) => i !== index),
+    }));
+  };
+
   // Handle form submit
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setSuccess("");
 
-    if (!formData.courseId || !formData.courseName || !formData.teacherName || !formData.branch) {
-      setError("All fields are required");
+    if (!formData.courseId || !formData.courseName || !formData.branch || !formData.courseTime) {
+      setError("Course ID, Course Name, Department, and Time are required");
+      return;
+    }
+
+    const validTeachers = formData.teachers.filter(t => t.id && t.id.trim() && t.name && t.name.trim());
+    if (validTeachers.length === 0) {
+      setError("At least one teacher with ID and name is required");
       return;
     }
 
@@ -85,7 +122,15 @@ export default function CourseManagement() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          courseId: formData.courseId,
+          courseName: formData.courseName,
+          teachers: formData.teachers
+            .filter(t => t.id && t.id.trim())
+            .map(t => t.id.trim()),
+          branch: formData.branch,
+          courseTime: formData.courseTime,
+        }),
       });
 
       const data = await response.json();
@@ -98,8 +143,9 @@ export default function CourseManagement() {
       setFormData({
         courseId: "",
         courseName: "",
-        teacherName: "",
+        teachers: [{ id: "", name: "" }],
         branch: "",
+        courseTime: "",
       });
       setEditingId(null);
       setShowForm(false);
@@ -113,7 +159,22 @@ export default function CourseManagement() {
 
   // Handle edit
   const handleEdit = (course) => {
-    setFormData(course);
+    // Convert teacher objects to teacher ID and name for editing
+    let teachers = [];
+    if (course.teachers && Array.isArray(course.teachers)) {
+      teachers = course.teachers.map(t => ({
+        id: typeof t === 'object' ? t.teacherId : t,
+        name: typeof t === 'object' ? t.name : "",
+      }));
+    }
+    
+    setFormData({
+      courseId: course.courseId,
+      courseName: course.courseName,
+      teachers: teachers.length > 0 ? teachers : [{ id: "", name: "" }],
+      branch: course.branch,
+      courseTime: course.courseTime,
+    });
     setEditingId(course.courseId);
     setShowForm(true);
     setError("");
@@ -153,8 +214,9 @@ export default function CourseManagement() {
     setFormData({
       courseId: "",
       courseName: "",
-      teacherName: "",
+      teachers: [{ id: "", name: "" }],
       branch: "",
+      courseTime: "",
     });
     setError("");
   };
@@ -240,19 +302,48 @@ export default function CourseManagement() {
                 />
               </div>
 
-              {/* Teacher Name */}
-              <div>
+              {/* Teachers */}
+              <div className="md:col-span-2">
                 <label className="block text-slate-300 font-semibold mb-2">
-                  Teacher Name
+                  Teachers (Add Teacher ID and Name)
                 </label>
-                <input
-                  type="text"
-                  name="teacherName"
-                  value={formData.teacherName}
-                  onChange={handleInputChange}
-                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                  placeholder="e.g., Dr. John Smith"
-                />
+                <div className="space-y-3">
+                  {formData.teachers.map((teacher, index) => (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={teacher.id}
+                        onChange={(e) => handleTeacherChange(index, "id", e.target.value)}
+                        className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                        placeholder="Teacher ID (e.g., T001)"
+                      />
+                      <input
+                        type="text"
+                        value={teacher.name}
+                        onChange={(e) => handleTeacherChange(index, "name", e.target.value)}
+                        className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                        placeholder="Teacher Name (e.g., John Smith)"
+                      />
+                      {formData.teachers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeTeacherField(index)}
+                          className="px-4 py-3 bg-red-900/50 hover:bg-red-800/50 text-red-300 rounded-lg transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={addTeacherField}
+                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 transition-all text-indigo-300 rounded-lg text-sm font-semibold"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Another Teacher
+                </button>
               </div>
 
               {/* Branch */}
@@ -275,7 +366,19 @@ export default function CourseManagement() {
                 </select>
               </div>
 
-              {/* Submit Button */}
+              {/* Course Time */}
+              <div>
+                <label className="block text-slate-300 font-semibold mb-2">
+                  Course Time
+                </label>
+                <input
+                  type="time"
+                  name="courseTime"
+                  value={formData.courseTime}
+                  onChange={handleInputChange}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
               <div className="md:col-span-2 flex gap-4">
                 <button
                   type="submit"
@@ -319,8 +422,9 @@ export default function CourseManagement() {
                   <tr>
                     <th className="px-6 py-4 text-left text-slate-300 font-semibold">ID</th>
                     <th className="px-6 py-4 text-left text-slate-300 font-semibold">Course Name</th>
-                    <th className="px-6 py-4 text-left text-slate-300 font-semibold">Teacher</th>
+                    <th className="px-6 py-4 text-left text-slate-300 font-semibold">Teachers</th>
                     <th className="px-6 py-4 text-left text-slate-300 font-semibold">Branch</th>
+                    <th className="px-6 py-4 text-left text-slate-300 font-semibold">Time</th>
                     <th className="px-6 py-4 text-left text-slate-300 font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -332,12 +436,25 @@ export default function CourseManagement() {
                     >
                       <td className="px-6 py-4 text-white font-semibold">{course.courseId}</td>
                       <td className="px-6 py-4 text-white">{course.courseName}</td>
-                      <td className="px-6 py-4 text-slate-300">{course.teacherName}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          {course.teachers && course.teachers.length > 0 ? (
+                            course.teachers.map((teacher, idx) => (
+                              <span key={idx} className="inline-block px-3 py-1 bg-green-900/50 text-green-300 rounded-full text-sm font-semibold">
+                                {typeof teacher === 'object' ? `${teacher.teacherId} (${teacher.name})` : teacher}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-400 text-sm">No teachers</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4">
                         <span className="inline-block px-3 py-1 bg-indigo-900/50 text-indigo-300 rounded-full text-sm font-semibold">
                           {course.branch}
                         </span>
                       </td>
+                      <td className="px-6 py-4 text-slate-300">{course.courseTime}</td>
                       <td className="px-6 py-4">
                         <div className="flex gap-2">
                           <button

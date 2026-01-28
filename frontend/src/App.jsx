@@ -17,6 +17,7 @@ import FeedbackModal from "./components/FeedbackModal";
 import CourseManagement from "./components/CourseManagement";
 import StudentCourseSelector from "./components/StudentCourseSelector";
 import FeedbackReport from "./components/FeedbackReport";
+import AddTeacher from "./components/AddTeacher";
 
 // Import Data
 import { COURSES, INITIAL_BLOCKS } from "./data/mockData";
@@ -406,6 +407,17 @@ export default function FeedbackApp() {
           {/* COURSE MANAGEMENT */}
           {user.role === "admin" && currentView === "courses" && (
             <CourseManagement />
+          )}
+
+          {/* ADD TEACHER */}
+          {user.role === "admin" && currentView === "addTeacher" && (
+            <AddTeacher 
+              onAdd={() => {
+                setCurrentView("dashboard");
+                showNotification("success", "Teacher added successfully!");
+              }} 
+              onCancel={() => setCurrentView("dashboard")}
+            />
           )}
 
           {/* FEEDBACK REPORT */}

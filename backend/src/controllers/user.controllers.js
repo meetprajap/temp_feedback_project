@@ -2,7 +2,7 @@ import { User } from '../models/user.model.js';
 import ApiError from '../utils/ApiError.js';
 import ApiResponse from '../utils/ApiResponse.js';
 import requestHandler from '../utils/asyncHandler.js';
-
+import { addStudent } from '../services/blockchainService.js';
 // Email validation pattern: starts with 23 and ends with @ddu.ac.in
 const validateDDUEmail = (email) => {
   const emailPattern = /^23[a-zA-Z0-9]*@ddu\.ac\.in$/;
@@ -63,6 +63,7 @@ const registerUser = requestHandler(async (req, res) => {
     throw new ApiError(500, "Something went wrong while registering the user");
   }
   
+   const transactionHash = await addStudent(createdUser);
   // Return success response
   return res.status(201).json(
     new ApiResponse(201, createdUser, "User registered successfully")

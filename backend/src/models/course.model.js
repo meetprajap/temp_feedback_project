@@ -14,17 +14,23 @@ const courseSchema = new mongoose.Schema(
       trim: true,
     },
 
-    teacherName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    teachers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Teacher",
+      }
+    ],
 
     branch: {
       type: String,
       required: true,
       trim: true,
-      enum: ["CE", "IT", "CE", "EC", "ME", "Civil"], // you can edit this list
+      enum: ["CE", "IT", "EC", "ME", "Civil"],
+    },
+
+    courseTime: {
+      type: String,
+      trim: true,
     },
 
     blockchainTxHash: {
@@ -38,7 +44,7 @@ const courseSchema = new mongoose.Schema(
     }
   },
   {
-    timestamps: true, // this automatically creates createdAt and updatedAt
+    timestamps: true,
   }
 );
 
