@@ -1,4 +1,5 @@
 import { registerUser, loginUser, logoutUser, checkFeedbackStatus, getStudentFeedbackStatus, submitFeedbackTracking, getCourseFeedbackStatus, getAllFeedbackStatus } from "../controllers/user.controllers.js";
+import { getTempFeedbackStorage, clearTempFeedbackStorage } from "../services/blockchainService.js";
 import { Router } from 'express'
 
 import { verifyJWT } from "../middleware/auth.middleware.js";
@@ -28,6 +29,12 @@ router.route("/course-feedback/:courseId").get(verifyJWT, getCourseFeedbackStatu
 
 // Get all feedback submissions (Admin) - Private
 router.route("/all-feedback").get(verifyJWT, getAllFeedbackStatus)
+
+// Get temporary feedback storage (Admin/Debug) - Private
+router.route("/temp-feedback-storage").get(verifyJWT, getTempFeedbackStorage)
+
+// Clear temporary feedback storage (Admin/Debug) - Private
+router.route("/clear-temp-storage").delete(verifyJWT, clearTempFeedbackStorage)
 
 export default router
 

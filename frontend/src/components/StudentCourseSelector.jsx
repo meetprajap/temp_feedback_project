@@ -46,6 +46,8 @@ export default function StudentCourseSelector({ onCourseSelect }) {
         const response = await fetch(courseUrl);
         const data = await response.json();
         
+        console.log("📚 Courses from backend:", data.data);
+        
         if (data.success && data.data) {
           setCourses(data.data);
           setFilteredCourses(data.data);
@@ -104,6 +106,7 @@ export default function StudentCourseSelector({ onCourseSelect }) {
   }, [selectedBranch, courses, userDepartment]);
 
   const handleCourseSelect = (course) => {
+    console.log("🎯 Selected course:", course);
     const hasSubmitted = feedbackStatus[course.courseId];
     
     if (hasSubmitted) {
@@ -227,7 +230,11 @@ export default function StudentCourseSelector({ onCourseSelect }) {
                     {/* Teacher */}
                     <div className="flex items-center gap-2 text-slate-300 mb-2">
                       <User className="w-4 h-4" />
-                      <span className="text-sm">{course.teacherName}</span>
+                      <span className="text-sm">
+                        {course.teacherName || (course.teachers && course.teachers.length > 0 
+                          ? course.teachers[0].name 
+                          : 'Unassigned')}
+                      </span>
                     </div>
 
                     {/* Branch */}

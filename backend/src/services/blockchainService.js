@@ -16,10 +16,10 @@ import { User } from '../models/user.model.js';
 const FeedbackABIModule = require('../services/FeedbackABI.json');
 // FeedbackABI.json is an array directly, not an object with .abi property
 const FeedbackContractABI = Array.isArray(FeedbackABIModule) ? FeedbackABIModule : FeedbackABIModule.abi;
-const contractAddress = '0xdEe3308326dE9EB200554FC6E469836CB9beAB4d'; // Replace with your deployed address
+const contractAddress = '0xF1Feb35e581e60Ac1f2A44066a5f1Bb132BE1e70'; // Replace with your deployed address
 
 // Assuming you have a default account/wallet configured to send transactions
-const adminAccount = '0x6c5f90893919e75CBC51A3456f11F3E94B1022ce';
+const adminAccount = '0x904D24E161685d9135d97A56d87bD7feAD6a5A2b';
 
 // Initialize contract only if web3 is properly configured
 let feedbackContract = null;
@@ -27,6 +27,8 @@ if (web3 && web3.eth) {
   feedbackContract = new web3.eth.Contract(FeedbackContractABI, contractAddress);
 }
 
+// Temporary storage for feedback data (not persisted to MongoDB)
+let tempFeedbackStorage = [];
 
 /**
  * Calls the addStudent function on the Feedback smart contract
@@ -95,5 +97,113 @@ const courseId = course.courseId.toString();
   }
 };
 
+import requestHandler from '../utils/asyncHandler.js';
+import ApiError from '../utils/ApiError.js';
+import ApiResponse from '../utils/ApiResponse.js';
 
-export { addStudent, createCourseblock };
+// Core function to submit feedback (can be called directly)
+const submitFeedbackLogic = async (feedbackData) => {
+  const {
+    studentId,
+    courseId,
+    teacherId,
+    ratings,
+    comments,
+    feedbackDetails
+  } = feedbackData;
+
+  console.log('DEBUG: submitFeedbackLogic received:', {
+    studentId,
+    courseId,
+    teacherId,
+    ratings,
+    comments,
+    feedbackDetails
+  });
+
+  if (!studentId || !courseId || !teacherId || !ratings || ratings.length !== 4) {
+    throw new ApiError(400, "studentId, courseId, teacherId and 4 ratings required");
+  }
+
+  // Store feedback in temporary variable (not in MongoDB)
+  const tempFeedback = {
+    studentId: studentId,
+    courseId: courseId,
+    teacherId: teacherId,
+    ratings: ratings,
+    comments: comments || "",
+    feedbackDetails: feedbackDetails || {},
+    storedAt: new Date().toISOString(),
+    processed: false
+  };
+
+  // Add to temporary storage
+  tempFeedbackStorage.push(tempFeedback);
+
+  console.log('Feedback stored in temporary variable:', tempFeedback);
+  console.log('Current temporary storage count:', tempFeedbackStorage.length);
+
+  const formattedRatings = ratings.map(r => Number(r));
+
+  try {
+    const receipt = await feedbackContract.methods
+      .submitFeedback(
+        studentId.toString(),
+        courseId.toString(),
+        teacherId.toString(),
+        formattedRatings,
+        comments || ""
+      )
+      .send({
+        from: process.env.ADMIN_WALLET || adminAccount,
+        gas: 500000
+      });
+
+    // Mark feedback as processed in temporary storage
+    tempFeedback.processed = true;
+    tempFeedback.transactionHash = receipt.transactionHash;
+
+    console.log('Feedback submitted to blockchain. Tx Hash:', receipt.transactionHash);
+
+    return {
+      txHash: receipt.transactionHash,
+      tempStorageId: tempFeedbackStorage.length - 1,
+      feedbackStored: true
+    };
+
+  } catch (error) {
+    console.error('Error submitting feedback to blockchain:', error);
+    throw new ApiError(500, `Blockchain submission failed: ${error.message}`);
+  }
+};
+
+// Route handler wrapper
+const submitFeedback = requestHandler(async (req, res) => {
+  const result = await submitFeedbackLogic(req.body);
+  return res.status(200).json(
+    new ApiResponse(200, result, "Feedback submitted successfully and stored in temporary variable")
+  );
+});
+
+// Get temporary feedback storage (for debugging/admin purposes)
+const getTempFeedbackStorage = requestHandler(async (req, res) => {
+  return res.status(200).json(
+    new ApiResponse(200, {
+      totalFeedback: tempFeedbackStorage.length,
+      feedbackList: tempFeedbackStorage
+    }, "Temporary feedback storage retrieved")
+  );
+});
+
+// Clear temporary feedback storage
+const clearTempFeedbackStorage = requestHandler(async (req, res) => {
+  const clearedCount = tempFeedbackStorage.length;
+  tempFeedbackStorage = [];
+  return res.status(200).json(
+    new ApiResponse(200, {
+      clearedCount: clearedCount
+    }, "Temporary feedback storage cleared")
+  );
+});
+
+export { addStudent, createCourseblock, submitFeedback, submitFeedbackLogic, getTempFeedbackStorage, clearTempFeedbackStorage };

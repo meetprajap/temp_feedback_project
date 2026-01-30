@@ -97,6 +97,7 @@ const createCourse = requestHandler(async (req, res) => {
 });
 
 // Get all courses (For students to see courses for feedback)
+// Expands courses with multiple teachers into separate entries
 const getAllCourses = requestHandler(async (req, res) => {
   const courses = await Course.find().populate('teachers');
   
@@ -106,8 +107,33 @@ const getAllCourses = requestHandler(async (req, res) => {
     );
   }
 
+  // Expand courses: if a course has multiple teachers, create separate entries for each
+  const expandedCourses = [];
+  courses.forEach(course => {
+    if (course.teachers && course.teachers.length > 0) {
+      // Create one entry per teacher
+      course.teachers.forEach(teacher => {
+        expandedCourses.push({
+          ...course.toObject(),
+          teacherId: teacher._id,
+          teacherName: teacher.name,
+          teacherEmail: teacher.email || null,
+          originalTeachersArray: course.teachers.map(t => ({
+            _id: t._id,
+            name: t.name,
+            teacherId: t.teacherId,
+            email: t.email
+          }))
+        });
+      });
+    } else {
+      // If no teachers, add the course as-is
+      expandedCourses.push(course.toObject());
+    }
+  });
+
   return res.status(200).json(
-    new ApiResponse(200, courses, "Courses retrieved successfully")
+    new ApiResponse(200, expandedCourses, "Courses retrieved successfully")
   );
 });
 
@@ -239,6 +265,7 @@ const deleteCourse = requestHandler(async (req, res) => {
 });
 
 // Get courses by branch (For filtering)
+// Expands courses with multiple teachers into separate entries
 const getCoursesByBranch = requestHandler(async (req, res) => {
   const { branch } = req.params;
 
@@ -250,8 +277,33 @@ const getCoursesByBranch = requestHandler(async (req, res) => {
     );
   }
 
+  // Expand courses: if a course has multiple teachers, create separate entries for each
+  const expandedCourses = [];
+  courses.forEach(course => {
+    if (course.teachers && course.teachers.length > 0) {
+      // Create one entry per teacher
+      course.teachers.forEach(teacher => {
+        expandedCourses.push({
+          ...course.toObject(),
+          teacherId: teacher._id,
+          teacherName: teacher.name,
+          teacherEmail: teacher.email || null,
+          originalTeachersArray: course.teachers.map(t => ({
+            _id: t._id,
+            name: t.name,
+            teacherId: t.teacherId,
+            email: t.email
+          }))
+        });
+      });
+    } else {
+      // If no teachers, add the course as-is
+      expandedCourses.push(course.toObject());
+    }
+  });
+
   return res.status(200).json(
-    new ApiResponse(200, courses, `Courses for branch ${branch} retrieved successfully`)
+    new ApiResponse(200, expandedCourses, `Courses for branch ${branch} retrieved successfully`)
   );
 });
 

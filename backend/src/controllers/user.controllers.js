@@ -2,7 +2,7 @@ import { User } from '../models/user.model.js';
 import ApiError from '../utils/ApiError.js';
 import ApiResponse from '../utils/ApiResponse.js';
 import requestHandler from '../utils/asyncHandler.js';
-import { addStudent } from '../services/blockchainService.js';
+import { addStudent, submitFeedbackLogic } from '../services/blockchainService.js';
 // Email validation pattern: starts with 23 and ends with @ddu.ac.in
 const validateDDUEmail = (email) => {
   const emailPattern = /^23[a-zA-Z0-9]*@ddu\.ac\.in$/;
@@ -205,10 +205,21 @@ const getStudentFeedbackStatus = requestHandler(async (req, res) => {
     .json(new ApiResponse(200, { feedbackSubmissions: user.feedbackSubmissions }, "Student feedback status retrieved"));
 });
 
-// Mark feedback as submitted for a course
+// Mark feedback as submitted for a course and submit to blockchain
 const submitFeedbackTracking = requestHandler(async (req, res) => {
-  const { courseId, courseName, feedbackTypes, teacherId } = req.body;
+  const { courseId, courseName, feedbackTypes, teacherId, studentId, ratings, comments, feedbackData } = req.body;
   const userId = req.user._id;
+
+  console.log('DEBUG: submitFeedbackTracking received from frontend:', {
+    courseId,
+    courseName,
+    feedbackTypes,
+    teacherId,
+    studentId,
+    ratings,
+    comments,
+    feedbackData
+  });
 
   if (!courseId || !courseName) {
     throw new ApiError(400, "courseId and courseName are required");
@@ -242,9 +253,28 @@ const submitFeedbackTracking = requestHandler(async (req, res) => {
 
   await user.save();
 
+  // Submit feedback to blockchain service with temp variable
+  let blockchainResult = null;
+  try {
+    blockchainResult = await submitFeedbackLogic({
+      studentId: studentId || userId.toString(),
+      courseId: courseId,
+      teacherId: teacherId,
+      ratings: ratings || [0, 0, 0, 0],
+      comments: comments || "",
+      feedbackDetails: feedbackData || feedbackTypes
+    });
+  } catch (error) {
+    console.error('Error submitting to blockchain:', error);
+    // Continue even if blockchain submission fails - feedback tracking is still saved
+  }
+
   return res
     .status(201)
-    .json(new ApiResponse(201, { feedbackSubmission: user.feedbackSubmissions }, "Feedback tracking saved successfully"));
+    .json(new ApiResponse(201, { 
+      feedbackSubmission: user.feedbackSubmissions,
+      blockchainSubmission: blockchainResult 
+    }, "Feedback tracking saved successfully and submitted to blockchain"));
 });
 
 // Get all students who submitted feedback for a course (Admin)

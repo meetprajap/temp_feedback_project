@@ -36,7 +36,13 @@ export default function FeedbackModal({ selectedCourse, onClose, onSubmit, isMin
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(ratings, comment);
+    // Store feedback in temp variable before sending to backend
+    const feedbackData = {
+      ratings,
+      comment,
+      submittedAt: new Date().toISOString()
+    };
+    onSubmit(feedbackData.ratings, feedbackData.comment);
   };
 
   return (

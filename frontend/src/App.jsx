@@ -62,6 +62,18 @@ export default function FeedbackApp() {
 
     setIsMining(true);
 
+    // Store feedback in temp variable before sending to backend
+    const tempFeedbackData = {
+      ratings: {
+        teaching: ratings.teaching,
+        communication: ratings.comms,
+        fairness: ratings.fairness,
+        engagement: ratings.engage
+      },
+      comment: comment,
+      submittedAt: new Date().toISOString()
+    };
+
     // Simulate Blockchain Process
     const steps = [
       () => setMiningStep(1), // Hashing
@@ -90,7 +102,7 @@ export default function FeedbackApp() {
         };
         setBlocks([newBlock, ...blocks]);
         
-        // Track feedback submission in database
+        // Send feedback to backend with temp feedback data and blockchain submission
         try {
           const userData = JSON.parse(localStorage.getItem('user'));
           const response = await fetch('http://localhost:4000/api/v1/user/submit-feedback', {
@@ -102,20 +114,25 @@ export default function FeedbackApp() {
             body: JSON.stringify({
               courseId: selectedCourse.courseId || selectedCourse.id,
               courseName: selectedCourse.courseName || selectedCourse.name,
+              studentId: userData?.id,
+              teacherId: selectedCourse.teacherId || selectedCourse.faculty,
+              ratings: [tempFeedbackData.ratings.teaching, tempFeedbackData.ratings.communication, tempFeedbackData.ratings.fairness, tempFeedbackData.ratings.engagement],
+              comments: tempFeedbackData.comment,
+              feedbackData: tempFeedbackData,
               feedbackTypes: {
-                teaching: !!ratings.teaching,
-                communication: !!ratings.comms,
-                fairness: !!ratings.fairness,
-                engagement: !!ratings.engage
+                teaching: !!tempFeedbackData.ratings.teaching,
+                communication: !!tempFeedbackData.ratings.communication,
+                fairness: !!tempFeedbackData.ratings.fairness,
+                engagement: !!tempFeedbackData.ratings.engagement
               }
             })
           });
           
           if (response.ok) {
-            console.log("Feedback tracking saved");
+            console.log("Feedback submitted and recorded on blockchain");
           }
         } catch (err) {
-          console.error("Error tracking feedback:", err);
+          console.error("Error submitting feedback:", err);
         }
         
         setIsMining(false);

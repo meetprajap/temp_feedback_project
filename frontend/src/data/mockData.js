@@ -1,7 +1,7 @@
 export const COURSES = [
-  { id: 'CS101', name: 'Blockchain Fundamentals', faculty: 'Dr. Satoshi Nakamoto', dept: 'CS', active: true, students: 120 },
-  { id: 'CS102', name: 'Smart Contract Security', faculty: 'Prof. Vitalik Buterin', dept: 'CS', active: true, students: 85 },
-  { id: 'ENG201', name: 'Technical Documentation', faculty: 'Ms. Ada Lovelace', dept: 'ENG', active: false, students: 200 },
+  { id: 'CS101', courseId: 1, name: 'Blockchain Fundamentals', courseName: 'Blockchain Fundamentals', faculty: 'Dr. Satoshi Nakamoto', teacherId: 'teacher001', dept: 'CS', active: true, students: 120 },
+  { id: 'CS102', courseId: 2, name: 'Smart Contract Security', courseName: 'Smart Contract Security', faculty: 'Prof. Vitalik Buterin', teacherId: 'teacher002', dept: 'CS', active: true, students: 85 },
+  { id: 'ENG201', courseId: 3, name: 'Technical Documentation', courseName: 'Technical Documentation', faculty: 'Ms. Ada Lovelace', teacherId: 'teacher003', dept: 'ENG', active: false, students: 200 },
 ];
 
 export const INITIAL_BLOCKS = [

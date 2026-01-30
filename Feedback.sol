@@ -18,16 +18,16 @@ contract FeedbackSystem {
         bool isRegistered;
     }
 
-    struct Feedback {
-        uint256 id;
-        string studentId;
-        string facultyId;
-        uint8[4] ratings;
-        uint256 finalScore;
-        string comments;
-        uint256 timestamp;
-    }
-
+   struct Feedback {
+    uint256 id;
+    string studentId;
+    string facultyId;
+    string courseId;
+    uint8[4] ratings;
+    uint256 totalScore;
+    string comments;
+    uint256 timestamp;
+}
     mapping(string => Student) public students;
     mapping(string => Teacher) public teachers;
 
@@ -76,40 +76,42 @@ contract FeedbackSystem {
     }
 
     // FEEDBACK (Backend calls this after student login)
+function submitFeedback(
+    string memory _studentId,
+    string memory _facultyId,
+    string memory _courseId,
+    uint8[4] memory _ratings,
+    string memory _comments
+) external onlyAdmin {
 
-    function submitFeedback(
-        string memory _studentId,
-        string memory _facultyId,
-        uint8[4] memory _ratings,
-        string memory _comments
-    ) external onlyAdmin {
+    require(students[_studentId].isRegistered, "Student not registered");
+    require(teachers[_facultyId].isRegistered, "Teacher not found");
 
-        require(students[_studentId].isRegistered, "Student not registered");
-        require(teachers[_facultyId].isRegistered, "Teacher not found");
+    uint256 score = 0;
 
-        uint256 score = 0;
-
-        for(uint i = 0; i < 4; i++) {
-            require(_ratings[i] >= 1 && _ratings[i] <= 5);
-            score += _ratings[i];
-        }
-
-        feedbackIdCounter++;
-
-        feedbacks.push(
-            Feedback(
-                feedbackIdCounter,
-                _studentId,
-                _facultyId,
-                _ratings,
-                score,
-                _comments,
-                block.timestamp
-            )
-        );
-
-        emit FeedbackSubmitted(feedbackIdCounter, _facultyId, _studentId);
+    for(uint i = 0; i < 4; i++) {
+        require(_ratings[i] >= 1 && _ratings[i] <= 5);
+        score += _ratings[i];
     }
+
+    feedbackIdCounter++;
+
+    feedbacks.push(
+        Feedback(
+            feedbackIdCounter,
+            _studentId,
+            _facultyId,
+            _courseId,
+            _ratings,
+            score,
+            _comments,
+            block.timestamp
+        )
+    );
+
+    emit FeedbackSubmitted(feedbackIdCounter, _facultyId, _studentId);
+}
+
 
     function getAllFeedbacks() external view returns (Feedback[] memory) {
         return feedbacks;
