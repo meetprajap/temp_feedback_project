@@ -24,67 +24,13 @@ const UserSchema = new Schema(
     type: String,
     required: [true, 'Password is required']
   },
-  role: {
-    type: String,
-    enum: ['student', 'admin'],
-    default: 'student'
-  },
+ 
   refreshToken: {
     type: String
   },
-  branch: {
-    type: String,
-    enum: ['CE', 'IT', 'EC', 'ME', 'Civil'],
-    required: false
-  },
-  department: {
-    type: String,
-    enum: ['CE', 'IT', 'EC', 'ME', 'Civil'],
-    required: false
-  },
-  feedbackSubmissions: [
-    {
-      courseId: {
-        type: Number,
-        required: true
-      },
-      courseName: {
-        type: String
-      },
-      teaching: {
-        type: Boolean,
-        default: false
-      },
-      communication: {
-        type: Boolean,
-        default: false
-      },
-      fairness: {
-        type: Boolean,
-        default: false
-      },
-      engagement: {
-        type: Boolean,
-        default: false
-      },
-      submittedAt: {
-        type: Date,
-        default: Date.now
-      },
-      blockchainTxHash: {
-        type: String,
-        default: null
-      },
-      blockchainBlockNumber: {
-        type: Number,
-        default: null
-      },
-      blockchainFinalScore: {
-        type: Number,
-        default: null
-      }
-    }
-  ],
+
+ 
+  
   walletAddress: {
     type: String,
     default: null,
@@ -120,33 +66,59 @@ UserSchema.methods.isPasswordCorrect = async function(password) {//method that c
 
 // Generate Access Token method
 UserSchema.methods.generateAccessToken = function() {
-  return jwt.sign(
-    {
+  try {
+    const payload = {
       _id: this._id,
       email: this.email,
       fullName: this.fullName,
       branch: this.branch,
       department: this.department,
       role: this.role
-    },
-    process.env.ACCESS_TOKEN_SECRET,
-    {
-      expiresIn: process.env.ACCESS_TOKEN_EXPIRY
+    };
+    
+    const secret = process.env.ACCESS_TOKEN_SECRET;
+    const expiry = process.env.ACCESS_TOKEN_EXPIRY;
+    
+    if (!secret) {
+      console.error("❌ ACCESS_TOKEN_SECRET is not set!");
+      throw new Error("ACCESS_TOKEN_SECRET is not configured");
     }
-  );
+    
+    console.log(`🔑 Generating Access Token:`);
+    console.log(`   User ID: ${this._id}`);
+    console.log(`   Secret length: ${secret.length}`);
+    console.log(`   Expiry: ${expiry}`);
+    
+    const token = jwt.sign(payload, secret, { expiresIn: expiry });
+    
+    console.log(`✅ Token generated successfully (length: ${token.length})`);
+    
+    return token;
+  } catch (error) {
+    console.error(`❌ Error generating access token: ${error.message}`);
+    throw error;
+  }
 };
 // Generate Refresh Token method
 UserSchema.methods.generateRefreshToken = function() {
-  return jwt.sign(
-    {
+  try {
+    const payload = {
       _id: this._id
-    },
-    process.env.REFRESH_TOKEN_SECRET,
-    {
-      expiresIn: process.env.REFRESH_TOKEN_EXPIRY
+    };
+    
+    const secret = process.env.REFRESH_TOKEN_SECRET;
+    const expiry = process.env.REFRESH_TOKEN_EXPIRY;
+    
+    if (!secret) {
+      console.error("❌ REFRESH_TOKEN_SECRET is not set!");
+      throw new Error("REFRESH_TOKEN_SECRET is not configured");
     }
-  );
-
+    
+    return jwt.sign(payload, secret, { expiresIn: expiry });
+  } catch (error) {
+    console.error(`❌ Error generating refresh token: ${error.message}`);
+    throw error;
+  }
 };
 
 export const User = mongoose.model("User",UserSchema)

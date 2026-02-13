@@ -15,8 +15,8 @@ router.route("/login").post(loginUser)
 // Logout route - Private, requires authentication
 router.route("/logout").post(verifyJWT, logoutUser)
 
-// Check feedback status for a course - Private
-router.route("/feedback-status/:courseId").get(verifyJWT, checkFeedbackStatus)
+// Check feedback status for a course and teacher - Private
+router.route("/feedback-status/:courseId/:teacherId").get(verifyJWT, checkFeedbackStatus)
 
 // Get all feedback submissions for student - Private
 router.route("/feedback-submissions").get(verifyJWT, getStudentFeedbackStatus)

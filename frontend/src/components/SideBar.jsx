@@ -5,6 +5,7 @@ import {
   LogOut,
   BookOpen,
   CheckCircle,
+  BarChart3,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -64,6 +65,17 @@ export default function Sidebar({
             >
               <CheckCircle className="w-5 h-5" />
               <span className="font-medium">Feedback Report</span>
+            </button>
+            <button
+              onClick={() => setCurrentView("results")}
+              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all duration-200 group ${
+                currentView === "results"
+                  ? "bg-indigo-600 shadow-lg shadow-indigo-900/20 text-white"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <BarChart3 className="w-5 h-5" />
+              <span className="font-medium">Feedback Results</span>
             </button>
           </>
         )}

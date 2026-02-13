@@ -126,8 +126,11 @@ export default function CourseManagement() {
           courseId: formData.courseId,
           courseName: formData.courseName,
           teachers: formData.teachers
-            .filter(t => t.id && t.id.trim())
-            .map(t => t.id.trim()),
+            .filter(t => t.id && t.id.trim() && t.name && t.name.trim())
+            .map(t => ({
+              teacherId: t.id.trim(),
+              teacherName: t.name.trim()
+            })),
           branch: formData.branch,
           courseTime: formData.courseTime,
         }),

@@ -8,32 +8,32 @@
 		"anonymous": false,
 		"inputs": [
 			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "oldAdmin",
-				"type": "address"
+				"indexed": false,
+				"internalType": "string",
+				"name": "courseId",
+				"type": "string"
 			},
 			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "newAdmin",
-				"type": "address"
+				"indexed": false,
+				"internalType": "string",
+				"name": "courseName",
+				"type": "string"
 			}
 		],
-		"name": "AdminChanged",
+		"name": "CourseAdded",
 		"type": "event"
 	},
 	{
 		"anonymous": false,
 		"inputs": [
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "id",
 				"type": "uint256"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "string",
 				"name": "facultyId",
 				"type": "string"
@@ -52,7 +52,7 @@
 		"anonymous": false,
 		"inputs": [
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "string",
 				"name": "studentId",
 				"type": "string"
@@ -71,7 +71,7 @@
 		"anonymous": false,
 		"inputs": [
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "string",
 				"name": "teacherId",
 				"type": "string"
@@ -85,6 +85,43 @@
 		],
 		"name": "TeacherAdded",
 		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "courseId",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "teacherId",
+				"type": "string"
+			}
+		],
+		"name": "TeacherAssignedToCourse",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_courseId",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_courseName",
+				"type": "string"
+			}
+		],
+		"name": "addCourse",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
 	},
 	{
 		"inputs": [
@@ -138,14 +175,96 @@
 	{
 		"inputs": [
 			{
-				"internalType": "address",
-				"name": "_newAdmin",
-				"type": "address"
+				"internalType": "string",
+				"name": "_courseId",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_teacherId",
+				"type": "string"
 			}
 		],
-		"name": "changeAdmin",
+		"name": "assignTeacherToCourse",
 		"outputs": [],
 		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "courseTeacherList",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"name": "courseTeachers",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"name": "courses",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "courseId",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "courseName",
+				"type": "string"
+			},
+			{
+				"internalType": "bool",
+				"name": "exists",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
@@ -256,11 +375,83 @@
 		"inputs": [
 			{
 				"internalType": "string",
+				"name": "facultyId",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "courseId",
+				"type": "string"
+			}
+		],
+		"name": "getTeacherCourseAverages",
+		"outputs": [
+			{
+				"internalType": "uint256[4]",
+				"name": "",
+				"type": "uint256[4]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"name": "hasSubmitted",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
 				"name": "_studentId",
 				"type": "string"
 			}
 		],
-		"name": "isStudent",
+		"name": "isStudentRegistered",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_teacherId",
+				"type": "string"
+			}
+		],
+		"name": "isTeacherRegistered",
 		"outputs": [
 			{
 				"internalType": "bool",
@@ -331,6 +522,30 @@
 		"name": "submitFeedback",
 		"outputs": [],
 		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"name": "teacherCourseStats",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "feedbackCount",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{

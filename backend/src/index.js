@@ -3,6 +3,15 @@ dotenv.config({ path: './.env' }); // Load early
 import connectDB from './db/index.js'; // Import connection
 import app from './app.js'; 
 
+// Validate required environment variables for JWT
+const requiredEnvVars = ['ACCESS_TOKEN_SECRET', 'REFRESH_TOKEN_SECRET', 'ACCESS_TOKEN_EXPIRY', 'REFRESH_TOKEN_EXPIRY'];
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  console.warn(`⚠️  Warning: Missing environment variables: ${missingEnvVars.join(', ')}`);
+  console.warn('JWT authentication will fail. Please ensure these are set in your .env file');
+}
+
 // Connect to database
 connectDB()
   .then(() => {

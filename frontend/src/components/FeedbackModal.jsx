@@ -33,16 +33,34 @@ const StarRating = ({ value, onChange, label, subLabel }) => {
 export default function FeedbackModal({ selectedCourse, onClose, onSubmit, isMining, miningStep }) {
   const [ratings, setRatings] = useState({ teaching: 0, comms: 0, fairness: 0, engage: 0 });
   const [comment, setComment] = useState('');
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
+
+  // Get list of teachers that haven't received feedback yet
+  const teachers = selectedCourse?.teachers || [];
+  
+  // Initialize with first teacher if not already selected
+  React.useEffect(() => {
+    if (teachers.length > 0 && !selectedTeacher) {
+      setSelectedTeacher(teachers[0]);
+    }
+  }, [selectedCourse, teachers, selectedTeacher]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    if (!selectedTeacher) {
+      alert('Please select a teacher');
+      return;
+    }
+    
     // Store feedback in temp variable before sending to backend
     const feedbackData = {
       ratings,
       comment,
-      submittedAt: new Date().toISOString()
+      submittedAt: new Date().toISOString(),
+      selectedTeacher: selectedTeacher
     };
-    onSubmit(feedbackData.ratings, feedbackData.comment);
+    onSubmit(feedbackData.ratings, feedbackData.comment, selectedTeacher);
   };
 
   return (
@@ -54,7 +72,9 @@ export default function FeedbackModal({ selectedCourse, onClose, onSubmit, isMin
            <div>
              <h3 className="text-xl font-extrabold text-slate-800">Submit Feedback</h3>
              <p className="text-slate-500 text-sm">{selectedCourse.courseName || selectedCourse.name}</p>
-             <p className="text-slate-400 text-xs mt-1">Teacher: {selectedCourse.teacherName || selectedCourse.faculty}</p>
+             {selectedTeacher && (
+               <p className="text-slate-400 text-xs mt-1">Teacher: {selectedTeacher.teacherName || selectedTeacher.name}</p>
+             )}
            </div>
            <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors" disabled={isMining}>
              <X className="w-6 h-6 text-slate-400" />

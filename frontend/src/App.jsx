@@ -9,39 +9,161 @@ import {
   TrendingUp,
   Copy,
 } from "lucide-react";
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useAccount } from 'wagmi';
 
 // Import Components
 import LoginScreen from "./components/LoginScreen";
+import WalletConnectionPage from "./components/WalletConnectionPage";
 import Sidebar from "./components/SideBar";
 import FeedbackModal from "./components/FeedbackModal";
 import CourseManagement from "./components/CourseManagement";
 import StudentCourseSelector from "./components/StudentCourseSelector";
 import FeedbackReport from "./components/FeedbackReport";
+import FeedbackResults from "./components/FeedbackResults";
 import AddTeacher from "./components/AddTeacher";
 
 // Import Data
 import { COURSES, INITIAL_BLOCKS } from "./data/mockData";
 
 export default function FeedbackApp() {
+  const { address: walletAddress, isConnected } = useAccount();
+  
   const [user, setUser] = useState(null);
+  const [pendingUser, setPendingUser] = useState(null); // User data before wallet connection
+  const [isConnectingWallet, setIsConnectingWallet] = useState(false); // Track wallet connection flow
   const [currentView, setCurrentView] = useState("dashboard");
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [blocks, setBlocks] = useState(INITIAL_BLOCKS);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState({}); // Track per-teacher feedback status
 
   // Modal State
   const [isMining, setIsMining] = useState(false);
   const [miningStep, setMiningStep] = useState(0);
   const [notification, setNotification] = useState(null);
 
-  const handleLogin = (role, id, token, department = null) => {
-    // Store user info and token in state and localStorage
-    const userData = { role, id, token, department };
-    setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
-    setCurrentView("dashboard");
-    showNotification("success", "Wallet Connected Successfully");
+  // Handle wallet connection during registration
+  useEffect(() => {
+    if (isConnectingWallet && isConnected && walletAddress && pendingUser) {
+      handleWalletConnection();
+    }
+  }, [isConnected, walletAddress, isConnectingWallet, pendingUser]);
+
+  const handleWalletConnection = async () => {
+    try {
+      console.log('🔗 Connecting wallet:', walletAddress);
+      
+      // Send wallet address to backend to save with user account
+      const response = await fetch('http://localhost:4000/api/v1/user/link-wallet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${pendingUser.token}`
+        },
+        body: JSON.stringify({
+          walletAddress: walletAddress,
+          email: pendingUser.email,
+          userId: pendingUser.id
+        })
+      });
+
+      if (response.ok) {
+        console.log("✅ Wallet linked successfully");
+        const userData = {
+          ...pendingUser,
+          walletAddress: walletAddress
+        };
+        
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        setCurrentView("dashboard");
+        showNotification("success", "Wallet Connected Successfully!");
+        setPendingUser(null);
+        setIsConnectingWallet(false);
+      } else {
+        throw new Error('Failed to link wallet');
+      }
+    } catch (err) {
+      console.error("❌ Error linking wallet:", err);
+      showNotification("error", "Failed to link wallet. Please try again.");
+      setIsConnectingWallet(false);
+    }
+  };
+
+  const handleLogin = async (role, id, token, department = null, email = null, isNewRegistration = false) => {
+    // Validate token exists and is valid
+    if (!token || token === 'undefined' || typeof token !== 'string' || token.length < 50) {
+      showNotification("error", "Authentication failed: No valid token received");
+      console.error("❌ Invalid token received:", { token, length: token?.length });
+      return;
+    }
+    
+    // Validate ID exists
+    if (!id) {
+      showNotification("error", "Authentication failed: No user ID received");
+      console.error("❌ No user ID received");
+      return;
+    }
+    
+    try {
+      // Fetch user wallet info from backend
+      const userResponse = await fetch(`http://localhost:4000/api/v1/user/wallet-info/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (userResponse.ok) {
+        const userWalletData = await userResponse.json();
+        
+        // If user has a registered wallet
+        if (userWalletData.walletAddress) {
+          // Check if wallet is connected
+          if (!isConnected) {
+            showNotification("error", "Please connect your wallet to proceed");
+            // Store temp user data and enable wallet connection flow
+            setPendingUser({ role, id, token, department, email });
+            setIsConnectingWallet(true);
+            return;
+          }
+          
+          // Check if connected wallet matches registered wallet
+          if (walletAddress.toLowerCase() !== userWalletData.walletAddress.toLowerCase()) {
+            showNotification("error", "Wallet address does not match registered wallet");
+            console.error("❌ Wallet mismatch:", { connected: walletAddress, registered: userWalletData.walletAddress });
+            return;
+          }
+          
+          console.log("✅ Wallet verified successfully");
+        } else if (!isNewRegistration) {
+          // Existing user without wallet - require wallet connection
+          showNotification("info", "Please connect your wallet to proceed");
+          setPendingUser({ role, id, token, department, email });
+          setIsConnectingWallet(true);
+          return;
+        } else {
+          // New registration - go to wallet connection page
+          console.log("📝 New registration, redirecting to wallet connection");
+          setPendingUser({ role, id, token, department, email });
+          setIsConnectingWallet(true);
+          return;
+        }
+      }
+      
+      // Store user info and token in state and localStorage
+      const userData = { role, id, token, department, email };
+      console.log("✅ Storing user data:", { role, id: id.substring(0, 10) + "...", department });
+      
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      setCurrentView("dashboard");
+      showNotification("success", "Login Successful");
+    } catch (err) {
+      console.error("❌ Error during login:", err);
+      showNotification("error", "Authentication error. Please try again.");
+    }
   };
 
   const showNotification = (type, msg) => {
@@ -49,7 +171,7 @@ export default function FeedbackApp() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  const handleFeedbackSubmit = async (ratings, comment) => {
+  const handleFeedbackSubmit = async (ratings, comment, selectedTeacher) => {
     if (
       !ratings.teaching ||
       !ratings.comms ||
@@ -105,17 +227,34 @@ export default function FeedbackApp() {
         // Send feedback to backend with temp feedback data and blockchain submission
         try {
           const userData = JSON.parse(localStorage.getItem('user'));
+          
+          // Validate token before sending
+          if (!userData?.token || userData.token === 'undefined') {
+            showNotification("error", "Authentication error: Please log in again");
+            setIsMining(false);
+            return;
+          }
+          
+          // Get teacherId from selectedTeacher object
+          const teacherId = selectedTeacher?.teacherId || selectedTeacher?.id;
+          
+          console.log('📤 Submitting feedback for teacher:', { 
+            teacherId, 
+            courseId: selectedCourse.courseId || selectedCourse.id,
+            selectedTeacher
+          });
+          
           const response = await fetch('http://localhost:4000/api/v1/user/submit-feedback', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${userData?.token}`
+              'Authorization': `Bearer ${userData.token}`
             },
             body: JSON.stringify({
               courseId: selectedCourse.courseId || selectedCourse.id,
               courseName: selectedCourse.courseName || selectedCourse.name,
               studentId: userData?.id,
-              teacherId: selectedCourse.teacherId || selectedCourse.faculty,
+              teacherId: teacherId,
               ratings: [tempFeedbackData.ratings.teaching, tempFeedbackData.ratings.communication, tempFeedbackData.ratings.fairness, tempFeedbackData.ratings.engagement],
               comments: tempFeedbackData.comment,
               feedbackData: tempFeedbackData,
@@ -130,6 +269,19 @@ export default function FeedbackApp() {
           
           if (response.ok) {
             console.log("Feedback submitted and recorded on blockchain");
+            
+            // Update feedbackStatus to reflect the newly submitted feedback
+            const courseId = selectedCourse.courseId || selectedCourse.id;
+            const statusKey = `${courseId}-${teacherId}`;
+            console.log("✅ Updating feedback status:", { courseId, teacherId, statusKey, submitted: true });
+            setFeedbackStatus(prev => {
+              const updated = {
+                ...prev,
+                [statusKey]: true
+              };
+              console.log("📊 New feedbackStatus state:", updated);
+              return updated;
+            });
           }
         } catch (err) {
           console.error("Error submitting feedback:", err);
@@ -150,7 +302,25 @@ export default function FeedbackApp() {
     }
   };
 
-  if (!user) return <LoginScreen onLogin={handleLogin} />;
+  if (isConnectingWallet && pendingUser) {
+    return (
+      <WalletConnectionPage
+        onWalletConnected={handleWalletConnection}
+        userName={pendingUser.role}
+        userRole={pendingUser.role}
+        userEmail={pendingUser.email}
+        notification={notification}
+      />
+    );
+  }
+
+  if (!user) return (
+    <div className="flex items-center justify-center w-full h-screen bg-[#0f172a]">
+      <div className="flex flex-col items-center gap-8">
+        <LoginScreen onLogin={handleLogin} />
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex h-screen bg-[#0f172a] text-slate-100 font-sans overflow-hidden">
@@ -239,6 +409,8 @@ export default function FeedbackApp() {
 
               <StudentCourseSelector
                 onCourseSelect={(course) => setSelectedCourse(course)}
+                feedbackStatus={feedbackStatus}
+                setFeedbackStatus={setFeedbackStatus}
               />
             </>
           )}
@@ -440,6 +612,11 @@ export default function FeedbackApp() {
           {/* FEEDBACK REPORT */}
           {user.role === "admin" && currentView === "feedbackReport" && (
             <FeedbackReport />
+          )}
+
+          {/* FEEDBACK RESULTS */}
+          {user.role === "admin" && currentView === "results" && (
+            <FeedbackResults />
           )}
         </div>
       </main>

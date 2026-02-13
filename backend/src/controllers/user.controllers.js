@@ -63,11 +63,36 @@ const registerUser = requestHandler(async (req, res) => {
     throw new ApiError(500, "Something went wrong while registering the user");
   }
   
-   const transactionHash = await addStudent(createdUser);
-  // Return success response
-  return res.status(201).json(
-    new ApiResponse(201, createdUser, "User registered successfully")
-  );
+  const transactionHash = await addStudent(createdUser);
+  
+  // Generate tokens for the new user
+  const accessToken = createdUser.generateAccessToken();
+  const refreshToken = createdUser.generateRefreshToken();
+  
+  // Update refresh token in database
+  createdUser.refreshToken = refreshToken;
+  await createdUser.save({ validateBeforeSave: false });
+  
+  // Set cookie options
+  const cookieOptions = {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    maxAge: 24 * 60 * 60 * 1000 // 1 day
+  };
+  
+  // Return success response with tokens
+  return res
+    .status(201)
+    .cookie("accessToken", accessToken, cookieOptions)
+    .cookie("refreshToken", refreshToken, cookieOptions)
+    .json(
+      new ApiResponse(201, {
+        user: createdUser,
+        accessToken: accessToken,
+        refreshToken: refreshToken
+      }, "User registered successfully")
+    );
 });
 
 // Login User
@@ -169,9 +194,9 @@ const logoutUser = requestHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "User logged out successfully"));
 });
 
-// Check if student has submitted feedback for a course
+// Check if student has submitted feedback for a course and teacher
 const checkFeedbackStatus = requestHandler(async (req, res) => {
-  const { courseId } = req.params;
+  const { courseId, teacherId } = req.params;
   const userId = req.user._id;
 
   const user = await User.findById(userId);
@@ -180,9 +205,9 @@ const checkFeedbackStatus = requestHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  // Check if feedback already submitted for this course
+  // Check if feedback already submitted for THIS COURSE + TEACHER combination
   const feedbackExists = user.feedbackSubmissions.some(
-    submission => submission.courseId === parseInt(courseId)
+    submission => submission.courseId === parseInt(courseId) && submission.teacherId === teacherId
   );
 
   return res
@@ -221,8 +246,8 @@ const submitFeedbackTracking = requestHandler(async (req, res) => {
     feedbackData
   });
 
-  if (!courseId || !courseName) {
-    throw new ApiError(400, "courseId and courseName are required");
+  if (!courseId || !courseName || !teacherId) {
+    throw new ApiError(400, "courseId, courseName, and teacherId are required");
   }
 
   const user = await User.findById(userId);
@@ -231,19 +256,20 @@ const submitFeedbackTracking = requestHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  // Check if feedback already submitted for this course
+  // Check if feedback already submitted for THIS COURSE + TEACHER combination
   const feedbackExists = user.feedbackSubmissions.some(
-    submission => submission.courseId === parseInt(courseId)
+    submission => submission.courseId === parseInt(courseId) && submission.teacherId === teacherId
   );
 
   if (feedbackExists) {
-    throw new ApiError(409, "You have already submitted feedback for this course");
+    throw new ApiError(409, "You have already submitted feedback for this course and teacher");
   }
 
-  // Add feedback submission tracking to database
+  // Add feedback submission tracking to database (per course + teacher)
   user.feedbackSubmissions.push({
     courseId: parseInt(courseId),
     courseName: courseName,
+    teacherId: teacherId,  // ✅ Track per teacher
     teaching: feedbackTypes?.teaching || false,
     communication: feedbackTypes?.communication || false,
     fairness: feedbackTypes?.fairness || false,

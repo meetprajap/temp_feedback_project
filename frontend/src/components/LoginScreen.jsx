@@ -48,10 +48,24 @@ export default function LoginScreen({ onLogin }) {
         throw new Error(data.message || "Login failed");
       }
 
+      // Debug: Log the response structure
+      console.log("🔑 Admin login response received:", {
+        statusCode: data.statusCode,
+        hasAccessToken: !!data.data?.accessToken,
+        hasUser: !!data.data?.user,
+        userData: data.data?.user ? { id: data.data.user._id, email: data.data.user.email } : null
+      });
+
+      // Validate response structure
+      if (!data.data?.accessToken || !data.data?.user) {
+        throw new Error("Invalid response: Missing token or user data");
+      }
+
       onLogin("admin", data.data.user._id, data.data.accessToken);
       setLoading(false);
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");
+      console.error("❌ Admin login error:", err);
       setLoading(false);
     }
   };

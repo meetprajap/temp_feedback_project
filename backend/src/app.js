@@ -43,7 +43,15 @@ app.use((err, req, res, next) => {
     const status = err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     
-    console.error(`Error: ${status} - ${message}`);
+    // Log detailed error info for JWT issues
+    if (message.includes('jwt') || message.includes('token')) {
+        console.error(`🔐 JWT/Token Error: ${status} - ${message}`);
+        console.error(`   Path: ${req.method} ${req.path}`);
+        console.error(`   Auth Header: ${req.header('Authorization') ? 'Present' : 'Missing'}`);
+        console.error(`   Cookie accessToken: ${req.cookies?.accessToken ? 'Present' : 'Missing'}`);
+    } else {
+        console.error(`Error: ${status} - ${message}`);
+    }
     
     return res.status(status).json({
         statusCode: status,

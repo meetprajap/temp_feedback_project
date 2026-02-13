@@ -70,6 +70,19 @@ export default function StudentAuth({ onLogin, onBackToRole }) {
         throw new Error(data.message || "Login failed");
       }
 
+      // Debug: Log the response structure
+      console.log("🔑 Login response received:", {
+        statusCode: data.statusCode,
+        hasAccessToken: !!data.data?.accessToken,
+        hasUser: !!data.data?.user,
+        userData: data.data?.user ? { id: data.data.user._id, email: data.data.user.email } : null
+      });
+
+      // Validate response structure
+      if (!data.data?.accessToken || !data.data?.user) {
+        throw new Error("Invalid response: Missing token or user data");
+      }
+
       setSuccess("Login successful!");
       setTimeout(() => {
         onLogin("student", data.data.user._id, data.data.accessToken, data.data.user.department);
@@ -129,9 +142,22 @@ export default function StudentAuth({ onLogin, onBackToRole }) {
         throw new Error(data.message || "Registration failed");
       }
 
+      // Debug: Log the response structure
+      console.log("🔑 Registration response received:", {
+        statusCode: data.statusCode,
+        hasAccessToken: !!data.data?.accessToken,
+        hasUser: !!data.data?.user,
+        userData: data.data?.user ? { id: data.data.user._id, email: data.data.user.email } : null
+      });
+
+      // Validate response structure
+      if (!data.data?.accessToken || !data.data?.user) {
+        throw new Error("Invalid response: Missing token or user data");
+      }
+
       setSuccess("Registration successful! Logging you in...");
       setTimeout(() => {
-        onLogin("student", data.data._id, data.data.accessToken || data.data.token, data.data.department);
+        onLogin("student", data.data.user._id, data.data.accessToken, data.data.user.department);
       }, 1500);
     } catch (err) {
       setError(err.message || "Registration failed. Please try again.");
