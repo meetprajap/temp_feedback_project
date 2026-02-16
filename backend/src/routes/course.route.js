@@ -5,30 +5,27 @@ import {
   updateCourse,
   deleteCourse,
   getCoursesByBranch,
-  getTeacherCourseResults
+  getTeacherCourseResults,
+  getAllFeedbacks,
+  getSubmissionTracking,
+  getDashboardStats
 } from "../controllers/course.controllers.js";
 import { Router } from 'express';
-import Course from '../models/course.model.js';
 import { getAllFeedbacksFromBlockchain } from '../services/blockchainService.js';
 
 const router = Router();
-
-// Debug endpoint to see raw course data - MUST BE BEFORE DYNAMIC ROUTES
-router.get("/debug-courses", async (req, res) => {
-  try {
-    const courses = await Course.find().populate('teachers');
-    console.log("🔍 DEBUG - Raw courses from DB:", JSON.stringify(courses, null, 2));
-    res.json({ success: true, courses, debug: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // Debug endpoint to see blockchain feedbacks
 router.get("/debug-feedbacks", async (req, res) => {
   try {
     const feedbacks = await getAllFeedbacksFromBlockchain();
-    console.log("🔍 DEBUG - Feedbacks from blockchain:", feedbacks);
+    console.log("🔍 DEBUG - RAW Feedbacks from blockchain:");
+    console.log("Total feedbacks:", feedbacks.length);
+    if (feedbacks.length > 0) {
+      console.log("First feedback raw structure:", JSON.stringify(feedbacks[0]));
+      console.log("First feedback keys:", Object.keys(feedbacks[0]));
+      console.log("First feedback values:", Object.values(feedbacks[0]));
+    }
     
     // Analyze by teacher
     const byTeacher = {};
@@ -53,6 +50,17 @@ router.get("/debug-feedbacks", async (req, res) => {
 
 // Public routes - Students can view courses
 router.route("/").get(getAllCourses);
+
+// Dashboard stats (Admin) - must be before /:courseId
+router.route("/dashboard/stats").get(getDashboardStats);
+
+// Get all feedbacks from blockchain (Admin) - must be before /:courseId
+router.route("/all-feedbacks").get(getAllFeedbacks);
+
+// Get submission tracking from MongoDB (Admin) - must be before /:courseId
+router.route("/submission-tracking").get(getSubmissionTracking);
+
+// Course by ID and branch - with dynamic params after static routes
 router.route("/:courseId").get(getCourseById);
 router.route("/branch/:branch").get(getCoursesByBranch);
 

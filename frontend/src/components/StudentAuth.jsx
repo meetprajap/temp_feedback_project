@@ -85,7 +85,7 @@ export default function StudentAuth({ onLogin, onBackToRole }) {
 
       setSuccess("Login successful!");
       setTimeout(() => {
-        onLogin("student", data.data.user._id, data.data.accessToken, data.data.user.department);
+        onLogin("student", data.data.user._id, data.data.accessToken, data.data.user.department, data.data.user.email, false);
       }, 1000);
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");
@@ -155,10 +155,10 @@ export default function StudentAuth({ onLogin, onBackToRole }) {
         throw new Error("Invalid response: Missing token or user data");
       }
 
-      setSuccess("Registration successful! Logging you in...");
+      setSuccess("Registration successful! Please connect your wallet...");
       setTimeout(() => {
-        onLogin("student", data.data.user._id, data.data.accessToken, data.data.user.department);
-      }, 1500);
+        onLogin("student", data.data.user._id, data.data.accessToken, data.data.user.department, data.data.user.email, true);
+      }, 1000);
     } catch (err) {
       setError(err.message || "Registration failed. Please try again.");
     } finally {

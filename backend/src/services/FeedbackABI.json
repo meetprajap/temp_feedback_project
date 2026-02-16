@@ -37,12 +37,6 @@
 				"internalType": "string",
 				"name": "facultyId",
 				"type": "string"
-			},
-			{
-				"indexed": false,
-				"internalType": "string",
-				"name": "studentId",
-				"type": "string"
 			}
 		],
 		"name": "FeedbackSubmitted",
@@ -53,9 +47,9 @@
 		"inputs": [
 			{
 				"indexed": false,
-				"internalType": "string",
-				"name": "studentId",
-				"type": "string"
+				"internalType": "address",
+				"name": "wallet",
+				"type": "address"
 			},
 			{
 				"indexed": false,
@@ -126,9 +120,9 @@
 	{
 		"inputs": [
 			{
-				"internalType": "string",
-				"name": "_studentId",
-				"type": "string"
+				"internalType": "address",
+				"name": "_wallet",
+				"type": "address"
 			},
 			{
 				"internalType": "string",
@@ -188,6 +182,25 @@
 		"name": "assignTeacherToCourse",
 		"outputs": [],
 		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "courseIds",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
@@ -284,11 +297,6 @@
 			},
 			{
 				"internalType": "string",
-				"name": "studentId",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
 				"name": "facultyId",
 				"type": "string"
 			},
@@ -318,6 +326,19 @@
 	},
 	{
 		"inputs": [],
+		"name": "getAllCourseIds",
+		"outputs": [
+			{
+				"internalType": "string[]",
+				"name": "",
+				"type": "string[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
 		"name": "getAllFeedbacks",
 		"outputs": [
 			{
@@ -326,11 +347,6 @@
 						"internalType": "uint256",
 						"name": "id",
 						"type": "uint256"
-					},
-					{
-						"internalType": "string",
-						"name": "studentId",
-						"type": "string"
 					},
 					{
 						"internalType": "string",
@@ -372,6 +388,38 @@
 		"type": "function"
 	},
 	{
+		"inputs": [],
+		"name": "getCourseCount",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_wallet",
+				"type": "address"
+			}
+		],
+		"name": "getStudentName",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
 		"inputs": [
 			{
 				"internalType": "string",
@@ -398,9 +446,9 @@
 	{
 		"inputs": [
 			{
-				"internalType": "string",
+				"internalType": "address",
 				"name": "",
-				"type": "string"
+				"type": "address"
 			},
 			{
 				"internalType": "string",
@@ -427,9 +475,9 @@
 	{
 		"inputs": [
 			{
-				"internalType": "string",
-				"name": "_studentId",
-				"type": "string"
+				"internalType": "address",
+				"name": "_wallet",
+				"type": "address"
 			}
 		],
 		"name": "isStudentRegistered",
@@ -465,18 +513,13 @@
 	{
 		"inputs": [
 			{
-				"internalType": "string",
+				"internalType": "address",
 				"name": "",
-				"type": "string"
+				"type": "address"
 			}
 		],
 		"name": "students",
 		"outputs": [
-			{
-				"internalType": "string",
-				"name": "studentId",
-				"type": "string"
-			},
 			{
 				"internalType": "string",
 				"name": "name",
@@ -494,9 +537,9 @@
 	{
 		"inputs": [
 			{
-				"internalType": "string",
-				"name": "_studentId",
-				"type": "string"
+				"internalType": "address",
+				"name": "_studentWallet",
+				"type": "address"
 			},
 			{
 				"internalType": "string",

@@ -28,12 +28,12 @@ export default function FeedbackReport() {
         console.error(err);
       }
 
-      // Fetch all feedback by default
+      // Fetch all submission tracking by default
       try {
         const token = JSON.parse(localStorage.getItem('user'))?.token;
         if (token) {
           const response = await fetch(
-            `${USER_API_BASE_URL}/all-feedback`,
+            `${API_BASE_URL}/submission-tracking`,
             {
               headers: {
                 "Authorization": `Bearer ${token}`
@@ -44,7 +44,8 @@ export default function FeedbackReport() {
           const data = await response.json();
 
           if (data.success) {
-            setAllFeedbackData(data.data.students || []);
+            // Data already in correct format from MongoDB
+            setAllFeedbackData(data.data.feedbacks);
             setViewMode("all"); // Set default view to all
           } else {
             console.error("Failed to load feedback data");
@@ -59,8 +60,8 @@ export default function FeedbackReport() {
   }, []);
 
   // Fetch feedback for selected course
-  const handleCourseSelect = async (courseId) => {
-    setSelectedCourse(courseId);
+  const handleCourseSelect = async (course) => {
+    setSelectedCourse(course._id); // Use unique MongoDB _id
     setLoading(true);
     setError("");
     
@@ -73,7 +74,7 @@ export default function FeedbackReport() {
       }
 
       const response = await fetch(
-        `${USER_API_BASE_URL}/course-feedback/${courseId}`,
+        `${USER_API_BASE_URL}/course-feedback/${course.courseId}`,
         {
           headers: {
             "Authorization": `Bearer ${token}`
@@ -109,8 +110,9 @@ export default function FeedbackReport() {
         return;
       }
 
+      // Fetch submission tracking from MongoDB
       const response = await fetch(
-        `${USER_API_BASE_URL}/all-feedback`,
+        `${API_BASE_URL}/submission-tracking`,
         {
           headers: {
             "Authorization": `Bearer ${token}`
@@ -121,7 +123,8 @@ export default function FeedbackReport() {
       const data = await response.json();
 
       if (data.success) {
-        setAllFeedbackData(data.data.students || []);
+        // Data already in correct format from MongoDB
+        setAllFeedbackData(data.data.feedbacks);
       } else {
         setError(data.message || "Failed to load feedback data");
       }
@@ -154,6 +157,8 @@ export default function FeedbackReport() {
             onClick={() => {
               setViewMode("course");
               setAllFeedbackData(null);
+              setSelectedCourse(null);
+              setFeedbackData(null);
             }}
             className={`px-6 py-2 rounded-lg font-semibold transition-all ${
               viewMode === "course"
@@ -194,9 +199,9 @@ export default function FeedbackReport() {
                     courses.map((course) => (
                       <button
                         key={course._id}
-                        onClick={() => handleCourseSelect(course.courseId)}
+                        onClick={() => handleCourseSelect(course)}
                         className={`w-full text-left p-4 transition-colors ${
-                          selectedCourse === course.courseId
+                          selectedCourse === course._id
                             ? "bg-blue-50 border-l-4 border-blue-600"
                             : "hover:bg-slate-50"
                         }`}
@@ -316,28 +321,19 @@ export default function FeedbackReport() {
                   <thead>
                     <tr className="bg-slate-100 border-b">
                       <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
+                        ID
+                      </th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
                         Student Name
                       </th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
                         Email
                       </th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                        Department
+                        Course ID
                       </th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                        Course Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                        Teaching
-                      </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                        Communication
-                      </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                        Fairness
-                      </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                        Engagement
+                        Teacher ID
                       </th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
                         Submitted At
@@ -348,66 +344,33 @@ export default function FeedbackReport() {
                     </tr>
                   </thead>
                   <tbody>
-                    {allFeedbackData.map((student) =>
-                      student.submissions && student.submissions.length > 0 ? (
-                        student.submissions.map((submission, idx) => (
-                          <tr key={`${student.studentId}-${idx}`} className="border-b hover:bg-slate-50">
-                            <td className="px-6 py-3 text-sm text-slate-900">
-                              {student.studentName}
-                            </td>
-                            <td className="px-6 py-3 text-sm text-slate-600">
-                              {student.studentEmail}
-                            </td>
-                            <td className="px-6 py-3 text-sm text-slate-600">
-                              {student.studentBranch}
-                            </td>
-                            <td className="px-6 py-3 text-sm text-slate-600">
-                              {submission.courseName}
-                            </td>
-                            <td className="px-6 py-3 text-sm text-center">
-                              {submission.feedbackTypes?.teaching ? (
-                                <span className="text-green-600 font-bold">✓</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-3 text-sm text-center">
-                              {submission.feedbackTypes?.communication ? (
-                                <span className="text-green-600 font-bold">✓</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-3 text-sm text-center">
-                              {submission.feedbackTypes?.fairness ? (
-                                <span className="text-green-600 font-bold">✓</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-3 text-sm text-center">
-                              {submission.feedbackTypes?.engagement ? (
-                                <span className="text-green-600 font-bold">✓</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-3 text-sm text-slate-600">
-                              {new Date(submission.submittedAt).toLocaleDateString()} at{" "}
-                              {new Date(submission.submittedAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit"
-                              })}
-                            </td>
-                            <td className="px-6 py-3 text-center">
-                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800">
-                                ✓ Done
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      ) : null
-                    )}
+                    {allFeedbackData.map((feedback) => (
+                      <tr key={feedback.id} className="border-b hover:bg-slate-50">
+                        <td className="px-6 py-3 text-sm text-slate-900 font-mono">
+                          #{feedback.id}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-slate-900 font-medium">
+                          {feedback.studentName}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-slate-600">
+                          {feedback.studentEmail || '-'}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-slate-900">
+                          {feedback.courseId}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-slate-900">
+                          {feedback.teacherId}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-slate-600 whitespace-nowrap">
+                          {feedback.timestamp}
+                        </td>
+                        <td className="px-6 py-3 text-center">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800">
+                            ✓ Submitted
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

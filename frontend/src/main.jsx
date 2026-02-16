@@ -19,15 +19,16 @@ const config = getDefaultConfig({
   appName: 'Student Feedback System',
   projectId: 'bd3d96fe9f320dfab810d9cb24d5c5f1',
   chains: [sepolia],
+  ssr: false, // Disable server-side rendering
 });
 
 const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <WagmiProvider config={config}>
+    <WagmiProvider config={config} reconnectOnMount={true}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>
+        <RainbowKitProvider modalSize="wide" initialChain={sepolia}>
           <App />
         </RainbowKitProvider>
       </QueryClientProvider>

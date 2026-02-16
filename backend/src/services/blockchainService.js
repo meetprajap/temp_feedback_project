@@ -16,10 +16,10 @@ import { User } from '../models/user.model.js';
 const FeedbackABIModule = require('../services/FeedbackABI.json');
 // FeedbackABI.json is an array directly, not an object with .abi property
 const FeedbackContractABI = Array.isArray(FeedbackABIModule) ? FeedbackABIModule : FeedbackABIModule.abi;
-const contractAddress = '0x6Db6013a358Aab15Aa0f7538D61A97216E00460e'; // Replace with your deployed address
+const contractAddress = '0x321bb5D8dE6719410611752B53782371C305f205'; // Replace with your deployed address
 
 // Assuming you have a default account/wallet configured to send transactions
-const adminAccount = '0x65c95dc7f2ae27ebdaedb2452f5e41bcb2792bc0';
+const adminAccount = '0xAAccd248bEF41DB260715973fD3b176B8fD2113C';
 
 // Initialize contract only if web3 is properly configured
 let feedbackContract = null;
@@ -32,27 +32,26 @@ let tempFeedbackStorage = [];
 
 /**
  * Calls the addStudent function on the Feedback smart contract
- * @param {string} studentId - The ID to record on chain
- * @param {string} studentName - The name associated with the ID
+ * @param {string} walletAddress - The wallet address to register
+ * @param {string} studentName - The name associated with the wallet
  * @returns {Promise<string>} The transaction hash
  */
-const addStudent = async (user) => {
+const addStudent = async (walletAddress, studentName) => {
   try {
+    console.log(`📝 Registering student on blockchain:`, {
+      wallet: walletAddress,
+      name: studentName
+    });
 
-    const studentName = user.fullName;
-    const studentId = user._id.toString(); // Mongo ObjectId as studentId
-   
-    console.log(user._id, user.fullName);
-    // This is where you interact with the EVM
-    const receipt = await feedbackContract.methods.addStudent(studentId, studentName)
-      .send({ from: adminAccount, gasLimit: 300000 }); // Estimate appropriate gas
+    // Call smart contract addStudent(wallet, name)
+    const receipt = await feedbackContract.methods.addStudent(walletAddress, studentName)
+      .send({ from: adminAccount, gasLimit: 300000 });
 
-    console.log('Transaction successful! Hash:', receipt.transactionHash);
-    return receipt.transactionHash; // Return the hash for the controller to use
+    console.log('✅ Student registered on blockchain! Hash:', receipt.transactionHash);
+    return receipt.transactionHash;
 
   } catch (error) {
-    console.error('Error executing smart contract transaction:', error);
-    // Re-throw the error so the controller can catch it and inform the user
+    console.error('❌ Error executing smart contract transaction:', error);
     throw new Error(`Blockchain transaction failed: ${error.message}`);
   }
 };
@@ -101,6 +100,22 @@ const createCourseblock = async (course) => {
       courseName: courseName,
       teacherCount: teachers?.length || 0
     });
+
+    // Check if course already exists on blockchain
+    try {
+      const existingCourse = await feedbackContract.methods.courses(courseId).call();
+      const exists = existingCourse.exists ?? existingCourse[2];
+      if (exists) {
+        throw new Error(`Course ${courseId} already exists on blockchain. Please use a different Course ID or restart Ganache.`);
+      }
+    } catch (error) {
+      // If error is our custom message, throw it
+      if (error.message.includes('already exists')) {
+        throw error;
+      }
+      // Otherwise, course doesn't exist (which is good), continue
+      console.log(`✅ Course ${courseId} does not exist yet, proceeding...`);
+    }
 
     // Register teachers on blockchain first
     if (Array.isArray(teachers) && teachers.length > 0) {
@@ -171,7 +186,7 @@ import ApiResponse from '../utils/ApiResponse.js';
 // Core function to submit feedback (can be called directly)
 const submitFeedbackLogic = async (feedbackData) => {
   const {
-    studentId,
+    walletAddress,
     courseId,
     teacherId,
     ratings,
@@ -180,7 +195,7 @@ const submitFeedbackLogic = async (feedbackData) => {
   } = feedbackData;
 
   console.log('DEBUG: submitFeedbackLogic received:', {
-    studentId,
+    walletAddress,
     courseId,
     teacherId,
     ratings,
@@ -188,13 +203,13 @@ const submitFeedbackLogic = async (feedbackData) => {
     feedbackDetails
   });
 
-  if (!studentId || !courseId || !teacherId || !ratings || ratings.length !== 4) {
-    throw new ApiError(400, "studentId, courseId, teacherId and 4 ratings required");
+  if (!walletAddress || !courseId || !teacherId || !ratings || ratings.length !== 4) {
+    throw new ApiError(400, "walletAddress, courseId, teacherId and 4 ratings required");
   }
 
   // Store feedback in temporary variable (not in MongoDB)
   const tempFeedback = {
-    studentId: studentId,
+    walletAddress: walletAddress,
     courseId: courseId,
     teacherId: teacherId,
     ratings: ratings,
@@ -214,17 +229,17 @@ const submitFeedbackLogic = async (feedbackData) => {
 
   try {
     console.log(`🔗 Submitting feedback to blockchain with:`);
-    console.log(`   Student ID: ${studentId}`);
+    console.log(`   Student Wallet: ${walletAddress}`);
     console.log(`   Teacher ID: ${teacherId}`);
     console.log(`   Course ID: ${courseId}`);
     console.log(`   Ratings: ${formattedRatings.join(', ')}`);
 
     const receipt = await feedbackContract.methods
       .submitFeedback(
-        studentId.toString(),
+        walletAddress,
         teacherId.toString(),
-         courseId.toString(),
-       formattedRatings,
+        courseId.toString(),
+        formattedRatings,
         comments || ""
       )
       .send({
@@ -271,7 +286,7 @@ const getTeacherCourseAveragesFromBlockchain = async (teacherId, courseId) => {
     try {
       averages = await feedbackContract.methods
         .getTeacherCourseAverages(teacherId, courseId)
-        .call();
+        .call({ from: adminAccount });
     } catch (contractError) {
       console.error(`❌ Smart contract call failed:`, contractError.message);
       // Check if it's a revert reason message
@@ -302,7 +317,7 @@ const getAllFeedbacksFromBlockchain = async () => {
     
     const feedbacks = await feedbackContract.methods
       .getAllFeedbacks()
-      .call();
+      .call({ from: adminAccount });
 
     console.log(`✅ Retrieved ${feedbacks.length} feedbacks:`, feedbacks);
     
@@ -334,4 +349,151 @@ const clearTempFeedbackStorage = requestHandler(async (req, res) => {
   );
 });
 
-export { addStudent, addTeacher, createCourseblock, submitFeedback, submitFeedbackLogic, getTempFeedbackStorage, clearTempFeedbackStorage, getTeacherCourseAveragesFromBlockchain, getAllFeedbacksFromBlockchain };
+export { addStudent, addTeacher, createCourseblock, submitFeedback, submitFeedbackLogic, getTempFeedbackStorage, clearTempFeedbackStorage, getTeacherCourseAveragesFromBlockchain, getAllFeedbacksFromBlockchain, getCourseFromBlockchain, getCoursesFromBlockchain, getCourseTeachersFromBlockchain };
+
+// Get course details from blockchain
+const getCourseFromBlockchain = async (courseId) => {
+  try {
+    if (!feedbackContract) {
+      throw new Error("Feedback contract not initialized");
+    }
+
+    console.log(`📚 Fetching course ${courseId} from blockchain...`);
+    
+    // Call the public courses mapping
+    const course = await feedbackContract.methods.courses(courseId).call();
+    
+    // Handle both indexed and named returns from struct
+    const exists = course.exists ?? course[2];
+    
+    if (!exists) {
+      throw new Error(`Course ${courseId} not found on blockchain`);
+    }
+
+    // Get teachers assigned to this course
+    const teacherIds = await feedbackContract.methods.courseTeacherList(courseId, 0).call();
+    
+    // Fetch teacher details for each teacherId
+    const teachers = [];
+    
+    // courseTeacherList returns one teacher at a time, we need to loop through indices
+    let index = 0;
+    const teacherList = [];
+    try {
+      while (true) {
+        const teacherId = await feedbackContract.methods.courseTeacherList(courseId, index).call();
+        if (teacherId) {
+          teacherList.push(teacherId);
+          index++;
+        } else {
+          break;
+        }
+      }
+    } catch (e) {
+      // End of array reached
+    }
+    
+    for (const teacherId of teacherList) {
+      try {
+        const teacher = await feedbackContract.methods.teachers(teacherId).call();
+        const isRegistered = teacher.isRegistered ?? teacher[2];
+        if (isRegistered) {
+          teachers.push({
+            teacherId: teacher.teacherId ?? teacher[0],
+            teacherName: teacher.name ?? teacher[1]
+          });
+        }
+      } catch (err) {
+        console.warn(`Could not fetch teacher ${teacherId}:`, err.message);
+      }
+    }
+
+    // Handle both named and indexed struct properties
+    const courseData = {
+      courseId: course.courseId ?? course[0],
+      courseName: course.courseName ?? course[1]
+    };
+
+    console.log(`✅ Retrieved course from blockchain:`, courseData.courseName);
+    
+    return {
+      courseId: courseData.courseId,
+      courseName: courseData.courseName,
+      teachers: teachers
+    };
+  } catch (error) {
+    console.error(`❌ Error fetching course from blockchain:`, error.message);
+    throw error;
+  }
+};
+
+// Get all courses from blockchain (Note: This requires maintaining a list of course IDs)
+// Since Solidity mappings can't be iterated, you'll need to track course IDs separately
+// For now, this returns an empty array - you should maintain courseIds in your contract
+const getCoursesFromBlockchain = async (courseIds = []) => {
+  try {
+    if (!feedbackContract) {
+      throw new Error("Feedback contract not initialized");
+    }
+
+    console.log(`📚 Fetching courses from blockchain...`);
+    
+    // If no courseIds provided, fetch all from blockchain
+    let coursesToFetch = courseIds;
+    if (!coursesToFetch || coursesToFetch.length === 0) {
+      console.log(`📋 Fetching all course IDs from blockchain...`);
+      coursesToFetch = await feedbackContract.methods.getAllCourseIds().call();
+      console.log(`📋 Found ${coursesToFetch.length} course(s) on blockchain`);
+    }
+    
+    const courses = [];
+    
+    // Fetch each course by ID
+    for (const courseId of coursesToFetch) {
+      try {
+        const course = await getCourseFromBlockchain(courseId);
+        courses.push(course);
+      } catch (error) {
+        console.warn(`⚠️ Could not fetch course ${courseId}:`, error.message);
+      }
+    }
+
+    console.log(`✅ Retrieved ${courses.length} courses from blockchain`);
+    
+    return courses;
+  } catch (error) {
+    console.error(`❌ Error fetching courses from blockchain:`, error.message);
+    throw error;
+  }
+};
+{ from: adminAccount }
+// Get teachers assigned to a course
+const getCourseTeachersFromBlockchain = async (courseId) => {
+  try {
+    if (!feedbackContract) {
+      throw new Error("Feedback contract not initialized");
+    }
+
+    console.log(`📚 Fetching teachers for course ${courseId} from blockchain...`);
+    
+    const teacherIds = await feedbackContract.methods.courseTeacherList(courseId).call({ from: adminAccount });
+    
+    const teachers = [];
+    for (const teacherId of teacherIds) {
+      const teacher = await feedbackContract.methods.teachers(teacherId).call({ from: adminAccount });
+      if (teacher.isRegistered) {
+        teachers.push({
+          teacherId: teacher.teacherId,
+          teacherName: teacher.name
+        });
+      }
+    }
+
+    console.log(`✅ Retrieved ${teachers.length} teachers for course ${courseId}`);
+    
+    return teachers;
+  } catch (error) {
+    console.error(`❌ Error fetching course teachers from blockchain:`, error.message);
+    throw error;
+  }
+};

@@ -1,16 +1,15 @@
-import Course from '../models/course.model.js';
-import { Teacher } from '../models/teacher.model.js';
 import ApiError from '../utils/ApiError.js';
 import ApiResponse from '../utils/ApiResponse.js';
 import requestHandler from '../utils/asyncHandler.js';
-import { createCourseblock, getTeacherCourseAveragesFromBlockchain } from '../services/blockchainService.js';
-// Create a new course (Admin only)
+import { createCourseblock, getTeacherCourseAveragesFromBlockchain, getCourseFromBlockchain, getCoursesFromBlockchain, getCourseTeachersFromBlockchain, getAllFeedbacksFromBlockchain } from '../services/blockchainService.js';
+
+// Create a new course (Admin only) - Send only to blockchain
 const createCourse = requestHandler(async (req, res) => {
   const { courseId, courseName, teachers, branch, courseTime } = req.body;
 
   // Validate all fields are provided
-  if (!courseId || !courseName || !teachers || !branch || !courseTime) {
-    throw new ApiError(400, "All fields (courseId, courseName, teachers, branch, courseTime) are required");
+  if (!courseId || !courseName || !teachers) {
+    throw new ApiError(400, "courseId, courseName, and teachers are required");
   }
 
   // Validate teachers array
@@ -25,351 +24,126 @@ const createCourse = requestHandler(async (req, res) => {
     }
   }
 
-  // Check if course already exists
-  const existingCourse = await Course.findOne({ courseId });
-  if (existingCourse) {
-    throw new ApiError(409, `Course with ID ${courseId} already exists`);
-  }
-
-  // Create new course in database first
-  const course = await Course.create({
-    courseId,
-    courseName,
-    teachers: [],
-    branch,
-    courseTime,
-  });
+  // Prepare teacher data for blockchain
+  const teachersData = teachers.map(t => ({
+    teacherId: t.teacherId.toString().trim(),
+    teacherName: t.teacherName.toString().trim()
+  }));
 
   console.log(`📚 Creating course: ${courseName} (ID: ${courseId})`);
-  console.log(`📝 Processing ${teachers.length} teacher(s)...`);
-
-  // Process and store teachers in MongoDB
-  const teacherIds = [];
-  const teachersForBlockchain = [];
-
-  for (const teacherData of teachers) {
-    const teacherId = teacherData.teacherId.toString().trim();
-    const teacherName = teacherData.teacherName.toString().trim();
-
-    console.log(`   - Processing teacher: ${teacherName} (ID: ${teacherId})`);
-
-    // Find existing teacher by teacherId
-    let teacher = await Teacher.findOne({ teacherId });
-    
-    // If teacher doesn't exist, create a new one
-    if (!teacher) {
-      try {
-        teacher = await Teacher.create({
-          teacherId,
-          name: teacherName,
-          courses: [course._id],
-          isActive: true,
-        });
-        console.log(`   ✅ New teacher created in MongoDB: ${teacherName}`);
-      } catch (error) {
-        // Handle duplicate key error in case of race condition
-        if (error.code === 11000) {
-          teacher = await Teacher.findOne({ teacherId });
-          if (!teacher) {
-            throw error;
-          }
-          if (!teacher.courses.includes(course._id)) {
-            teacher = await Teacher.findByIdAndUpdate(
-              teacher._id,
-              { $addToSet: { courses: course._id } },
-              { new: true }
-            );
-          }
-          console.log(`   ✅ Existing teacher linked: ${teacherName}`);
-        } else {
-          throw error;
-        }
-      }
-    } else {
-      // If teacher exists, add course to their courses array if not already there
-      if (!teacher.courses.includes(course._id)) {
-        teacher = await Teacher.findByIdAndUpdate(
-          teacher._id,
-          { $addToSet: { courses: course._id } },
-          { new: true }
-        );
-        console.log(`   ✅ Course added to existing teacher: ${teacherName}`);
-      } else {
-        console.log(`   ✅ Teacher already linked to course: ${teacherName}`);
-      }
-    }
-
-    teacherIds.push(teacher._id);
-    
-    // Prepare teacher data for blockchain with proper teacherId and teacherName
-    teachersForBlockchain.push({
-      teacherId,
-      teacherName
-    });
-  }
+  console.log(`📝 Adding ${teachers.length} teacher(s)`);
 
   // Register course and teachers on blockchain
   try {
-    console.log(`🔗 Sending to blockchain with ${teachersForBlockchain.length} teacher(s)...`);
+    console.log(`🔗 Sending to blockchain with ${teachersData.length} teacher(s)...`);
     const txHash = await createCourseblock({
-      courseId: course.courseId,
-      courseName: course.courseName,
-      teachers: teachersForBlockchain  // Pass teacherId and teacherName directly
+      courseId: courseId.toString(),
+      courseName: courseName,
+      teachers: teachersData
     });
 
     console.log(`✅ Course and teachers registered on blockchain with hash: ${txHash}`);
-  } catch (blockchainError) {
-    console.warn(`⚠️  Course created in MongoDB but blockchain registration failed:`, blockchainError.message);
-    // Continue - course is in database even if blockchain fails
-  }
 
-  // Update course with teacher IDs
-  const updatedCourse = await Course.findByIdAndUpdate(
-    course._id,
-    { $set: { teachers: teacherIds } },
-    { new: true }
-  ).populate('teachers');
+    // Fetch the created course from blockchain to return
+    const createdCourse = await getCourseFromBlockchain(courseId.toString());
 
-  return res.status(201).json(
-    new ApiResponse(201, updatedCourse, "Course created successfully with teachers stored in MongoDB")
-  );
-});
-
-// Get all courses (For students to see courses for feedback)
-// Expands courses with multiple teachers into separate entries
-const getAllCourses = requestHandler(async (req, res) => {
-  const courses = await Course.find().populate('teachers');
-  
-  if (!courses || courses.length === 0) {
-    return res.status(200).json(
-      new ApiResponse(200, [], "No courses available")
+    return res.status(201).json(
+      new ApiResponse(201, {
+        ...createdCourse,
+        branch: branch,
+        courseTime: courseTime,
+        txHash: txHash
+      }, "Course created successfully on blockchain")
     );
+  } catch (blockchainError) {
+    console.error(`❌ Blockchain registration failed:`, blockchainError.message);
+    throw new ApiError(500, `Failed to create course on blockchain: ${blockchainError.message}`);
   }
-
-  // Expand courses: if a course has multiple teachers, create separate entries for each
-  const expandedCourses = [];
-  courses.forEach(course => {
-    if (course.teachers && course.teachers.length > 0) {
-      // Create one entry per teacher
-      course.teachers.forEach(teacher => {
-        // Create a new object with only the essential course data
-        const expandedCourse = {
-          _id: course._id,
-          courseId: course.courseId,
-          courseName: course.courseName,
-          branch: course.branch,
-          courseTime: course.courseTime,
-          blockchainTxHash: course.blockchainTxHash,
-          blockchainBlockNumber: course.blockchainBlockNumber,
-          createdAt: course.createdAt,
-          updatedAt: course.updatedAt,
-          // Only include THIS teacher in the teachers array
-          teachers: [{
-            _id: teacher._id,
-            name: teacher.name,
-            teacherId: teacher.teacherId,
-            email: teacher.email
-          }],
-          // Add teacher info at top level too
-          teacherId: teacher.teacherId,
-          teacherName: teacher.name,
-          teacherEmail: teacher.email || null,
-        };
-        console.log(`📚 Expanding course ${course.courseName} (ID: ${course.courseId}) - Teacher: ${teacher.name} (ID: ${teacher.teacherId})`);
-        expandedCourses.push(expandedCourse);
-      });
-    } else {
-      // If no teachers, add the course as-is
-      expandedCourses.push(course.toObject());
-    }
-  });
-
-  console.log(`✅ Total expanded courses: ${expandedCourses.length}`);
-  return res.status(200).json(
-    new ApiResponse(200, expandedCourses, "Courses retrieved successfully")
-  );
 });
 
-// Get course by ID
+// Get all courses - Fetches from blockchain
+const getAllCourses = requestHandler(async (req, res) => {
+  try {
+    // Fetch all courses from blockchain (blockchain now tracks all courseIds)
+    console.log(`📚 Fetching all courses from blockchain...`);
+    const courses = await getCoursesFromBlockchain();
+
+    const expandedCourses = [];
+    
+    for (const course of courses) {
+      // Expand courses: create one entry per teacher
+      if (course.teachers && course.teachers.length > 0) {
+        course.teachers.forEach(teacher => {
+          expandedCourses.push({
+            courseId: course.courseId,
+            courseName: course.courseName,
+            teacherId: teacher.teacherId,
+            teacherName: teacher.teacherName,
+            teachers: [teacher] // Single teacher per expanded entry
+          });
+        });
+      } else {
+        expandedCourses.push(course);
+      }
+    }
+
+    console.log(`✅ Retrieved ${expandedCourses.length} expanded courses from blockchain`);
+    
+    return res.status(200).json(
+      new ApiResponse(200, expandedCourses, "Courses retrieved from blockchain")
+    );
+  } catch (error) {
+    console.error(`❌ Error fetching courses:`, error.message);
+    throw new ApiError(500, `Failed to fetch courses: ${error.message}`);
+  }
+});
+
+// Get course by ID - Fetches from blockchain
 const getCourseById = requestHandler(async (req, res) => {
   const { courseId } = req.params;
 
-  const course = await Course.findOne({ courseId }).populate('teachers');
-  
-  if (!course) {
-    throw new ApiError(404, `Course with ID ${courseId} not found`);
-  }
-
-  return res.status(200).json(
-    new ApiResponse(200, course, "Course retrieved successfully")
-  );
-});
-
-// Update course (Admin only)
-const updateCourse = requestHandler(async (req, res) => {
-  const { courseId } = req.params;
-  const { courseName, teachers, branch, courseTime } = req.body;
-
-  // Find course
-  const course = await Course.findOne({ courseId });
-  if (!course) {
-    throw new ApiError(404, `Course with ID ${courseId} not found`);
-  }
-
-  // Handle teachers update
-  let teacherIds = course.teachers;
-  if (teachers && Array.isArray(teachers) && teachers.length > 0) {
-    teacherIds = [];
-    for (const teacherId of teachers) {
-      if (!teacherId || typeof teacherId !== 'string' || !teacherId.trim()) {
-        throw new ApiError(400, "Invalid teacher ID provided");
-      }
-
-      // Find or create teacher by teacherId
-      let teacher = await Teacher.findOne({ teacherId: teacherId.trim() });
-      
-      if (!teacher) {
-        try {
-          teacher = await Teacher.create({
-            teacherId: teacherId.trim(),
-            name: teacherId.trim(),
-            courses: [],
-            isActive: true,
-          });
-        } catch (error) {
-          if (error.code === 11000) {
-            teacher = await Teacher.findOne({ teacherId: teacherId.trim() });
-            if (!teacher) {
-              throw error;
-            }
-          } else {
-            throw error;
-          }
-        }
-      }
-      teacherIds.push(teacher._id);
-    }
-  }
-
-  // Update course
-  const updatedCourse = await Course.findOneAndUpdate(
-    { courseId },
-    {
-      $set: {
-        ...(courseName && { courseName }),
-        ...(teacherIds && { teachers: teacherIds }),
-        ...(branch && { branch }),
-        ...(courseTime && { courseTime })
-      }
-    },
-    { new: true }
-  ).populate('teachers');
-
-  // If teachers were updated, update their courses arrays
-  if (teachers && Array.isArray(teachers) && teachers.length > 0) {
-    // Remove course from old teachers
-    for (const oldTeacherId of course.teachers) {
-      if (!teacherIds.includes(oldTeacherId)) {
-        await Teacher.findByIdAndUpdate(
-          oldTeacherId,
-          { $pull: { courses: updatedCourse._id } },
-          { new: true }
-        );
-      }
-    }
+  try {
+    console.log(`📚 Fetching course ${courseId} from blockchain...`);
+    const course = await getCourseFromBlockchain(courseId);
     
-    // Add course to new teachers
-    for (const newTeacherId of teacherIds) {
-      await Teacher.findByIdAndUpdate(
-        newTeacherId,
-        { $addToSet: { courses: updatedCourse._id } },
-        { new: true }
-      );
-    }
-  }
-
-  return res.status(200).json(
-    new ApiResponse(200, updatedCourse, "Course updated successfully")
-  );
-});
-
-// Delete course (Admin only)
-const deleteCourse = requestHandler(async (req, res) => {
-  const { courseId } = req.params;
-
-  const course = await Course.findOneAndDelete({ courseId });
-
-  if (!course) {
-    throw new ApiError(404, `Course with ID ${courseId} not found`);
-  }
-
-  // Remove course from all associated teachers
-  for (const teacherId of course.teachers) {
-    await Teacher.findByIdAndUpdate(
-      teacherId,
-      { $pull: { courses: course._id } },
-      { new: true }
+    return res.status(200).json(
+      new ApiResponse(200, course, "Course retrieved from blockchain")
     );
+  } catch (error) {
+    throw new ApiError(404, `Course with ID ${courseId} not found on blockchain`);
   }
-
-  return res.status(200).json(
-    new ApiResponse(200, course, "Course deleted successfully")
-  );
 });
 
-// Get courses by branch (For filtering)
-// Expands courses with multiple teachers into separate entries
+// Update course - Not supported (blockchain is immutable)
+const updateCourse = requestHandler(async (req, res) => {
+  throw new ApiError(400, "Course update not supported - blockchain data is immutable. Create a new course instead.");
+});
+
+// Delete course - Not supported (blockchain is immutable)
+const deleteCourse = requestHandler(async (req, res) => {
+  throw new ApiError(400, "Course deletion not supported - blockchain data is immutable.");
+});
+
+// Get courses by branch - Fetches from blockchain with courseIds
 const getCoursesByBranch = requestHandler(async (req, res) => {
   const { branch } = req.params;
-
-  const courses = await Course.find({ branch }).populate('teachers');
-
-  if (!courses || courses.length === 0) {
+  
+  try {
+    // Fetch all courses from blockchain (blockchain tracks all courseIds now)
+    const courses = await getCoursesFromBlockchain();
+    
+    console.log(`✅ Retrieved ${courses.length} courses from blockchain for branch: ${branch}`);
+    
+    // Return all courses - frontend will filter by department if needed
+    // Blockchain doesn't store branch/department information
     return res.status(200).json(
-      new ApiResponse(200, [], `No courses found for branch: ${branch}`)
+      new ApiResponse(200, courses, `Courses retrieved from blockchain. Total: ${courses.length}`)
     );
+  } catch (error) {
+    console.error(`❌ Error fetching courses:`, error.message);
+    throw new ApiError(500, `Failed to fetch courses: ${error.message}`);
   }
-
-  // Expand courses: if a course has multiple teachers, create separate entries for each
-  const expandedCourses = [];
-  courses.forEach(course => {
-    if (course.teachers && course.teachers.length > 0) {
-      // Create one entry per teacher
-      course.teachers.forEach(teacher => {
-        expandedCourses.push({
-          ...course.toObject(),
-          teacherId: teacher.teacherId,  // ✅ Use teacher's teacherId (string like "T008"), not MongoDB _id
-          teacherName: teacher.name,
-          teacherEmail: teacher.email || null,
-          teacherDbId: teacher._id,  // Keep MongoDB _id for reference
-          originalTeachersArray: course.teachers.map(t => ({
-            _id: t._id,
-            name: t.name,
-            teacherId: t.teacherId,
-            email: t.email
-          }))
-        });
-      });
-    } else {
-      // If no teachers, add the course as-is
-      expandedCourses.push(course.toObject());
-    }
-  });
-
-  return res.status(200).json(
-    new ApiResponse(200, expandedCourses, `Courses for branch ${branch} retrieved successfully`)
-  );
 });
-
-export {
-  createCourse,
-  getAllCourses,
-  getCourseById,
-  updateCourse,
-  deleteCourse,
-  getCoursesByBranch,
-  getTeacherCourseResults
-};
 
 // Get feedback results for a specific teacher in a specific course
 const getTeacherCourseResults = requestHandler(async (req, res) => {
@@ -382,14 +156,14 @@ const getTeacherCourseResults = requestHandler(async (req, res) => {
   console.log(`📊 Fetching results for course ${courseId}, teacher ${teacherId}`);
 
   try {
-    // Get course from MongoDB
-    const course = await Course.findOne({ courseId }).populate('teachers');
+    // Get course from blockchain
+    const course = await getCourseFromBlockchain(courseId);
     if (!course) {
-      throw new ApiError(404, "Course not found");
+      throw new ApiError(404, "Course not found on blockchain");
     }
 
     console.log(`✅ Course found:`, course.courseName);
-    console.log(`📋 Teachers in course:`, course.teachers.map(t => ({ name: t.name, teacherId: t.teacherId })));
+    console.log(`📋 Teachers in course:`, course.teachers.map(t => ({ name: t.teacherName, teacherId: t.teacherId })));
 
     // Find the specific teacher in the course
     const teacher = course.teachers.find(t => t.teacherId === teacherId);
@@ -398,19 +172,18 @@ const getTeacherCourseResults = requestHandler(async (req, res) => {
       throw new ApiError(404, `Teacher ${teacherId} not found in course ${courseId}`);
     }
 
-    console.log(`✅ Teacher found: ${teacher.name} (${teacher.teacherId})`);
+    console.log(`✅ Teacher found: ${teacher.teacherName} (${teacher.teacherId})`);
 
-    // Get averages from blockchain - ensure courseId is a string
+    // Get averages from blockchain
     let averages;
     try {
       const courseIdStr = String(courseId);
       const teacherIdStr = String(teacherId);
-      console.log(`🔗 Calling blockchain with courseId=${courseIdStr} (string), teacherId=${teacherIdStr} (string)`);
+      console.log(`🔗 Calling blockchain with courseId=${courseIdStr}, teacherId=${teacherIdStr}`);
       averages = await getTeacherCourseAveragesFromBlockchain(teacherIdStr, courseIdStr);
       console.log(`✅ Got averages from blockchain:`, averages);
     } catch (blockchainError) {
       console.error(`❌ Blockchain error:`, blockchainError.message);
-      // Check if it's a "No feedback" error
       if (blockchainError.message.includes("No feedback")) {
         throw new ApiError(404, "No feedback available for this teacher-course combination yet");
       }
@@ -429,15 +202,194 @@ const getTeacherCourseResults = requestHandler(async (req, res) => {
       new ApiResponse(200, {
         courseId,
         courseName: course.courseName,
-        branch: course.branch,
         teacherId,
-        teacherName: teacher.name,
+        teacherName: teacher.teacherName,
         ratings: ratingDetails,
         overallScore: parseFloat(overallScore.toFixed(2))
-      }, "Teacher course results retrieved successfully")
+      }, "Teacher course results retrieved from blockchain")
     );
   } catch (err) {
     console.error(`❌ Error in getTeacherCourseResults:`, err.message);
     throw err;
   }
 });
+
+// Get all feedbacks from blockchain (Admin) - with ratings and comments
+const getAllFeedbacks = requestHandler(async (req, res) => {
+  console.log('📊 Fetching all feedbacks from blockchain...');
+  
+  try {
+    const feedbacks = await getAllFeedbacksFromBlockchain();
+    
+    // Format feedbacks for frontend display
+    const formattedFeedbacks = feedbacks.map((fb) => ({
+      id: fb.id?.toString() || fb.feedbackId?.toString() || fb[5]?.toString(),
+      teacherId: fb.facultyId || fb[1],
+      courseId: fb.courseId || fb[2],
+      ratings: {
+        teaching: parseInt(fb.ratings[0]),
+        communication: parseInt(fb.ratings[1]),
+        fairness: parseInt(fb.ratings[2]),
+        engagement: parseInt(fb.ratings[3])
+      },
+      totalScore: parseInt(fb.totalScore),
+      averageScore: (parseInt(fb.totalScore) / 4).toFixed(2),
+      comments: fb.comments || "",
+      timestamp: new Date(parseInt(fb.timestamp) * 1000).toLocaleString(),
+      timestampRaw: parseInt(fb.timestamp)
+    }));
+    
+    // Group by course and teacher
+    const groupedByCourse = {};
+    const groupedByTeacher = {};
+    
+    formattedFeedbacks.forEach(fb => {
+      if (!groupedByCourse[fb.courseId]) {
+        groupedByCourse[fb.courseId] = [];
+      }
+      groupedByCourse[fb.courseId].push(fb);
+      
+      if (!groupedByTeacher[fb.teacherId]) {
+        groupedByTeacher[fb.teacherId] = [];
+      }
+      groupedByTeacher[fb.teacherId].push(fb);
+    });
+    
+    console.log(`✅ Retrieved ${formattedFeedbacks.length} feedbacks from blockchain`);
+    
+    return res.status(200).json(
+      new ApiResponse(200, {
+        feedbacks: formattedFeedbacks,
+        totalCount: formattedFeedbacks.length,
+        groupedByCourse,
+        groupedByTeacher
+      }, "All feedbacks retrieved from blockchain successfully")
+    );
+  } catch (err) {
+    console.error('❌ Error fetching all feedbacks:', err);
+    throw new ApiError(500, `Failed to fetch feedbacks: ${err.message}`);
+  }
+});
+
+// Get submission tracking from MongoDB (Admin) - student names and submission status only
+const getSubmissionTracking = requestHandler(async (req, res) => {
+  console.log('📊 Fetching submission tracking from MongoDB...');
+  
+  try {
+    const { User } = await import('../models/user.model.js');
+    
+    // Get all users who have submitted feedback
+    const usersWithFeedback = await User.find({
+      'feedbackSubmissions.0': { $exists: true }
+    }).select('fullName username email walletAddress feedbackSubmissions');
+    
+    // Format the data for frontend
+    const allSubmissions = [];
+    let feedbackId = 1;
+    
+    usersWithFeedback.forEach(user => {
+      user.feedbackSubmissions.forEach(submission => {
+        allSubmissions.push({
+          id: feedbackId++,
+          studentName: user.fullName || user.username || 'Unknown',
+          studentEmail: user.email || '',
+          studentWallet: user.walletAddress || '',
+          courseId: submission.courseId,
+          courseName: submission.courseName || '',
+          teacherId: submission.teacherId || '',
+          timestamp: submission.submittedAt.toLocaleString(),
+          timestampRaw: submission.submittedAt.getTime() / 1000
+        });
+      });
+    });
+    
+    // Sort by timestamp (newest first)
+    allSubmissions.sort((a, b) => b.timestampRaw - a.timestampRaw);
+    
+    // Group by course and teacher
+    const groupedByCourse = {};
+    const groupedByTeacher = {};
+    
+    allSubmissions.forEach(fb => {
+      if (!groupedByCourse[fb.courseId]) {
+        groupedByCourse[fb.courseId] = [];
+      }
+      groupedByCourse[fb.courseId].push(fb);
+      
+      if (!groupedByTeacher[fb.teacherId]) {
+        groupedByTeacher[fb.teacherId] = [];
+      }
+      groupedByTeacher[fb.teacherId].push(fb);
+    });
+    
+    console.log(`✅ Retrieved ${allSubmissions.length} submissions from MongoDB`);
+    
+    return res.status(200).json(
+      new ApiResponse(200, {
+        feedbacks: allSubmissions,
+        totalCount: allSubmissions.length,
+        groupedByCourse,
+        groupedByTeacher
+      }, "Submission tracking retrieved successfully")
+    );
+  } catch (err) {
+    console.error('❌ Error fetching submissions:', err);
+    throw new ApiError(500, `Failed to fetch submissions: ${err.message}`);
+  }
+});
+
+// Get dashboard statistics (Admin only)
+const getDashboardStats = requestHandler(async (req, res) => {
+  try {
+    const { User } = await import('../models/user.model.js');
+    
+    // Get total students and teachers from MongoDB
+    const totalStudents = await User.countDocuments({ role: 'student' });
+    const totalTeachers = await User.countDocuments({ role: 'teacher' });
+    
+    // Get all feedbacks from blockchain
+    const allFeedbacks = await getAllFeedbacksFromBlockchain();
+    const totalSubmittedFeedbacks = allFeedbacks.length;
+    
+    // Get recent feedbacks (last 5)
+    const recentFeedbacks = allFeedbacks
+      .sort((a, b) => Number(b.timestamp) - Number(a.timestamp))
+      .slice(0, 5)
+      .map((fb, index) => ({
+        id: index + 1,
+        studentName: fb.studentWallet ? `${fb.studentWallet.slice(0, 6)}...${fb.studentWallet.slice(-4)}` : 'Anonymous',
+        studentWallet: fb.studentWallet,
+        courseId: fb.courseId,
+        facultyId: fb.facultyId,
+        timestamp: new Date(Number(fb.timestamp) * 1000).toLocaleString(),
+        status: 'Confirmed'
+      }));
+    
+    console.log(`📊 Dashboard Stats: ${totalStudents} students, ${totalTeachers} teachers, ${totalSubmittedFeedbacks} feedbacks`);
+    
+    return res.status(200).json(
+      new ApiResponse(200, {
+        totalStudents,
+        totalTeachers,
+        totalSubmittedFeedbacks,
+        recentFeedbacks
+      }, "Dashboard statistics retrieved successfully")
+    );
+  } catch (err) {
+    console.error('❌ Error fetching dashboard stats:', err);
+    throw new ApiError(500, `Failed to fetch dashboard statistics: ${err.message}`);
+  }
+});
+
+export {
+  createCourse,
+  getAllCourses,
+  getCourseById,
+  updateCourse,
+  deleteCourse,
+  getCoursesByBranch,
+  getTeacherCourseResults,
+  getAllFeedbacks,
+  getSubmissionTracking,
+  getDashboardStats
+};

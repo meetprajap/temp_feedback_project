@@ -7,21 +7,53 @@ import {
   RefreshCw,
   ChevronRight,
   Star,
+  MessageSquare,
+  Calendar,
+  User,
+  Filter,
+  ChevronDown,
 } from "lucide-react";
 
 const API_BASE_URL = "http://localhost:4000/api/v1/course";
 
 export default function FeedbackResults() {
+  const [allFeedbacks, setAllFeedbacks] = useState([]);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expandedCourse, setExpandedCourse] = useState(null);
   const [courseResults, setCourseResults] = useState({});
   const [loadingResults, setLoadingResults] = useState({});
+  const [viewMode, setViewMode] = useState("summary"); // "summary" or "detailed"
+  const [filterCourse, setFilterCourse] = useState("all");
+  const [filterTeacher, setFilterTeacher] = useState("all");
 
   useEffect(() => {
     fetchCourses();
+    fetchAllFeedbacks();
   }, []);
+
+  const fetchAllFeedbacks = async () => {
+    try {
+      const userData = JSON.parse(localStorage.getItem("user"));
+      const token = userData?.token;
+      
+      const response = await fetch(`${API_BASE_URL}/all-feedbacks`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+
+      console.log("📊 All feedbacks from blockchain:", data);
+
+      if (data.success && data.data) {
+        setAllFeedbacks(data.data.feedbacks || []);
+      }
+    } catch (err) {
+      console.error("Error fetching all feedbacks:", err);
+    }
+  };
 
   const fetchCourses = async () => {
     setLoading(true);
@@ -122,15 +154,56 @@ export default function FeedbackResults() {
     return "bg-red-900/30 border-red-600/50";
   };
 
+  // Filter feedbacks based on selected course and teacher
+  const filteredFeedbacks = allFeedbacks.filter(fb => {
+    if (filterCourse !== "all" && fb.courseId !== filterCourse) return false;
+    if (filterTeacher !== "all" && fb.teacherId !== filterTeacher) return false;
+    return true;
+  });
+
+  // Get unique courses and teachers for filters
+  const uniqueCourses = [...new Set(allFeedbacks.map(fb => fb.courseId))];
+  const uniqueTeachers = [...new Set(allFeedbacks.map(fb => fb.teacherId))];
+
   return (
     <div className="w-full">
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <BarChart3 className="w-8 h-8 text-indigo-400" />
-          <h2 className="text-3xl font-bold text-white">Feedback Results</h2>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <BarChart3 className="w-8 h-8 text-indigo-400" />
+            <h2 className="text-3xl font-bold text-white">Feedback Results</h2>
+          </div>
+          
+          {/* View Mode Toggle */}
+          <div className="flex gap-2 bg-slate-800 p-1 rounded-lg border border-slate-700">
+            <button
+              onClick={() => setViewMode("summary")}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                viewMode === "summary"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Summary View
+            </button>
+            <button
+              onClick={() => setViewMode("detailed")}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                viewMode === "detailed"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              All Feedbacks ({allFeedbacks.length})
+            </button>
+          </div>
         </div>
-        <p className="text-slate-400">View feedback averages for each teacher per course</p>
+        <p className="text-slate-400">
+          {viewMode === "summary" 
+            ? "View feedback averages for each teacher per course"
+            : "View all individual feedback submissions from blockchain"}
+        </p>
       </div>
 
       {/* Error Message */}
@@ -149,12 +222,157 @@ export default function FeedbackResults() {
             <p className="text-slate-400">Loading courses...</p>
           </div>
         </div>
+      ) : viewMode === "detailed" ? (
+        /* DETAILED VIEW - Show All Individual Feedbacks */
+        <div className="space-y-6">
+          {/* Filters */}
+          <div className="flex gap-4 mb-4">
+            <div className="flex-1">
+              <label className="block text-sm text-slate-400 mb-2">Filter by Course</label>
+              <select
+                value={filterCourse}
+                onChange={(e) => setFilterCourse(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-indigo-500 focus:outline-none"
+              >
+                <option value="all">All Courses</option>
+                {uniqueCourses.map(courseId => (
+                  <option key={courseId} value={courseId}>Course {courseId}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm text-slate-400 mb-2">Filter by Teacher</label>
+              <select
+                value={filterTeacher}
+                onChange={(e) => setFilterTeacher(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-indigo-500 focus:outline-none"
+              >
+                <option value="all">All Teachers</option>
+                {uniqueTeachers.map(teacherId => (
+                  <option key={teacherId} value={teacherId}>Teacher {teacherId}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Stats Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+              <p className="text-slate-400 text-sm mb-1">Total Feedbacks</p>
+              <p className="text-3xl font-bold text-white">{filteredFeedbacks.length}</p>
+            </div>
+            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+              <p className="text-slate-400 text-sm mb-1">Average Rating</p>
+              <p className="text-3xl font-bold text-indigo-400">
+                {filteredFeedbacks.length > 0 
+                  ? (filteredFeedbacks.reduce((sum, fb) => sum + parseFloat(fb.averageScore), 0) / filteredFeedbacks.length).toFixed(2)
+                  : "0.00"}
+              </p>
+            </div>
+            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+              <p className="text-slate-400 text-sm mb-1">Courses</p>
+              <p className="text-3xl font-bold text-emerald-400">{uniqueCourses.length}</p>
+            </div>
+            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+              <p className="text-slate-400 text-sm mb-1">Teachers</p>
+              <p className="text-3xl font-bold text-amber-400">{uniqueTeachers.length}</p>
+            </div>
+          </div>
+
+          {/* Feedback Cards */}
+          <div className="space-y-4">
+            {filteredFeedbacks.length === 0 ? (
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 text-center">
+                <AlertCircle className="w-12 h-12 text-slate-500 mx-auto mb-3" />
+                <p className="text-slate-400">No feedbacks found</p>
+              </div>
+            ) : (
+              filteredFeedbacks.map((feedback) => (
+                <div
+                  key={feedback.id}
+                  className={`bg-slate-800 border-2 rounded-xl p-6 ${getRatingBg(feedback.averageScore)}`}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-3 py-1 bg-indigo-600/30 text-indigo-300 rounded-full text-xs font-semibold">
+                          Feedback #{feedback.id}
+                        </span>
+                        <span className="text-slate-400 text-sm flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          {feedback.timestamp}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-slate-400">
+                        <span>Course: <span className="text-white font-semibold">{feedback.courseId}</span></span>
+                        <span>•</span>
+                        <span>Teacher: <span className="text-white font-semibold">{feedback.teacherId}</span></span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-3xl font-bold ${getRatingColor(feedback.averageScore)}`}>
+                        {feedback.averageScore}
+                      </div>
+                      <p className="text-xs text-slate-400">Average</p>
+                    </div>
+                  </div>
+
+                  {/* Rating Breakdown */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div className="bg-slate-700/50 p-3 rounded-lg">
+                      <p className="text-xs text-slate-400 mb-1">Teaching</p>
+                      <div className="flex items-center gap-2">
+                        <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                        <p className="text-lg font-bold text-white">{feedback.ratings.teaching}</p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-700/50 p-3 rounded-lg">
+                      <p className="text-xs text-slate-400 mb-1">Communication</p>
+                      <div className="flex items-center gap-2">
+                        <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                        <p className="text-lg font-bold text-white">{feedback.ratings.communication}</p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-700/50 p-3 rounded-lg">
+                      <p className="text-xs text-slate-400 mb-1">Fairness</p>
+                      <div className="flex items-center gap-2">
+                        <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                        <p className="text-lg font-bold text-white">{feedback.ratings.fairness}</p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-700/50 p-3 rounded-lg">
+                      <p className="text-xs text-slate-400 mb-1">Engagement</p>
+                      <div className="flex items-center gap-2">
+                        <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                        <p className="text-lg font-bold text-white">{feedback.ratings.engagement}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Comments */}
+                  {feedback.comments && (
+                    <div className="bg-slate-700/30 p-4 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <MessageSquare className="w-4 h-4 text-indigo-400" />
+                        <p className="text-sm font-semibold text-slate-300">Comments</p>
+                      </div>
+                      <p className="text-slate-300 text-sm leading-relaxed">{feedback.comments}</p>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       ) : courses.length === 0 ? (
+        /* NO COURSES */
         <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 text-center">
           <AlertCircle className="w-12 h-12 text-slate-500 mx-auto mb-3" />
           <p className="text-slate-400">No courses available</p>
         </div>
       ) : (
+        /* SUMMARY VIEW - Course-wise Teacher Averages */
         <div className="space-y-4">
           {courses.map((course) => (
             <div

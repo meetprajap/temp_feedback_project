@@ -34,7 +34,7 @@ contract FeedbackSystem {
 
     struct Feedback {
         uint256 id;
-        string studentId;
+       
         string facultyId;
         string courseId;
         uint8[4] ratings;

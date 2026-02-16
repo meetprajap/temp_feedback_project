@@ -1,4 +1,4 @@
-import { registerUser, loginUser, logoutUser, checkFeedbackStatus, getStudentFeedbackStatus, submitFeedbackTracking, getCourseFeedbackStatus, getAllFeedbackStatus } from "../controllers/user.controllers.js";
+import { registerUser, loginUser, logoutUser, checkFeedbackStatus, getStudentFeedbackStatus, submitFeedbackTracking, getCourseFeedbackStatus, getAllFeedbackStatus, linkWallet, getWalletInfo, verifyWallet } from "../controllers/user.controllers.js";
 import { getTempFeedbackStorage, clearTempFeedbackStorage } from "../services/blockchainService.js";
 import { Router } from 'express'
 
@@ -14,6 +14,11 @@ router.route("/login").post(loginUser)
 
 // Logout route - Private, requires authentication
 router.route("/logout").post(verifyJWT, logoutUser)
+
+// Wallet routes - Private, requires authentication
+router.route("/link-wallet").post(verifyJWT, linkWallet)
+router.route("/wallet-info/:userId").get(verifyJWT, getWalletInfo)
+router.route("/verify-wallet").post(verifyJWT, verifyWallet)
 
 // Check feedback status for a course and teacher - Private
 router.route("/feedback-status/:courseId/:teacherId").get(verifyJWT, checkFeedbackStatus)

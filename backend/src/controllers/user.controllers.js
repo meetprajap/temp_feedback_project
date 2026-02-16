@@ -63,7 +63,7 @@ const registerUser = requestHandler(async (req, res) => {
     throw new ApiError(500, "Something went wrong while registering the user");
   }
   
-  const transactionHash = await addStudent(createdUser);
+  // Note: Blockchain registration (addStudent) will be called from frontend after wallet connection
   
   // Generate tokens for the new user
   const accessToken = createdUser.generateAccessToken();
@@ -279,11 +279,15 @@ const submitFeedbackTracking = requestHandler(async (req, res) => {
 
   await user.save();
 
-  // Submit feedback to blockchain service with temp variable
+  // Submit feedback to blockchain service with student's wallet address
   let blockchainResult = null;
   try {
+    if (!user.walletAddress) {
+      throw new ApiError(400, "Student wallet not connected. Please connect wallet first.");
+    }
+    
     blockchainResult = await submitFeedbackLogic({
-      studentId: studentId || userId.toString(),
+      walletAddress: user.walletAddress,
       courseId: courseId,
       teacherId: teacherId,
       ratings: ratings || [0, 0, 0, 0],
@@ -292,7 +296,7 @@ const submitFeedbackTracking = requestHandler(async (req, res) => {
     });
   } catch (error) {
     console.error('Error submitting to blockchain:', error);
-    // Continue even if blockchain submission fails - feedback tracking is still saved
+    throw error; // Don't continue if blockchain submission fails
   }
 
   return res
@@ -375,4 +379,108 @@ const getAllFeedbackStatus = requestHandler(async (req, res) => {
     .json(new ApiResponse(200, { students: feedbackStatus }, "All feedback submissions retrieved"));
 });
 
-export { registerUser, loginUser, logoutUser, checkFeedbackStatus, getStudentFeedbackStatus, submitFeedbackTracking, getCourseFeedbackStatus, getAllFeedbackStatus }; 
+// Link wallet to user account
+const linkWallet = requestHandler(async (req, res) => {
+  const { walletAddress, userId } = req.body;
+  
+  if (!walletAddress) {
+    throw new ApiError(400, "Wallet address is required");
+  }
+  
+  const user = await User.findById(userId || req.user._id);
+  
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+  
+  // Check if wallet is already linked to another account
+  const existingWallet = await User.findOne({ 
+    walletAddress: walletAddress.toLowerCase(),
+    _id: { $ne: user._id }
+  });
+  
+  if (existingWallet) {
+    throw new ApiError(409, "This wallet is already linked to another account");
+  }
+  
+  // Link wallet to user
+  user.walletAddress = walletAddress.toLowerCase();
+  await user.save({ validateBeforeSave: false });
+  
+  // Register student on blockchain with wallet address
+  try {
+    const transactionHash = await addStudent(walletAddress.toLowerCase(), user.fullName);
+    console.log("✅ Student registered on blockchain:", transactionHash);
+  } catch (blockchainError) {
+    console.error("❌ Blockchain registration failed:", blockchainError.message);
+    // Remove wallet from user if blockchain registration fails
+    user.walletAddress = null;
+    await user.save({ validateBeforeSave: false });
+    throw new ApiError(500, `Failed to register on blockchain: ${blockchainError.message}`);
+  }
+  
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { walletAddress: user.walletAddress }, "Wallet linked successfully"));
+});
+
+// Get wallet info for user
+const getWalletInfo = requestHandler(async (req, res) => {
+  const { userId } = req.params;
+  
+  const user = await User.findById(userId).select("walletAddress email fullName");
+  
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+  
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { 
+      walletAddress: user.walletAddress,
+      email: user.email,
+      fullName: user.fullName
+    }, "Wallet info retrieved"));
+});
+
+// Verify wallet matches user account
+const verifyWallet = requestHandler(async (req, res) => {
+  const { walletAddress, userId } = req.body;
+  
+  if (!walletAddress) {
+    throw new ApiError(400, "Wallet address is required");
+  }
+  
+  const user = await User.findById(userId || req.user._id);
+  
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+  
+  if (!user.walletAddress) {
+    throw new ApiError(400, "No wallet linked to this account");
+  }
+  
+  const isMatch = user.walletAddress.toLowerCase() === walletAddress.toLowerCase();
+  
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { 
+      isMatch,
+      registeredWallet: user.walletAddress 
+    }, isMatch ? "Wallet verified successfully" : "Wallet does not match"));
+});
+
+export { 
+  registerUser, 
+  loginUser, 
+  logoutUser, 
+  checkFeedbackStatus, 
+  getStudentFeedbackStatus, 
+  submitFeedbackTracking, 
+  getCourseFeedbackStatus, 
+  getAllFeedbackStatus,
+  linkWallet,
+  getWalletInfo,
+  verifyWallet
+}; 

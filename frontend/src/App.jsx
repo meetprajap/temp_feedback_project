@@ -38,22 +38,60 @@ export default function FeedbackApp() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState({}); // Track per-teacher feedback status
+  const [dashboardStats, setDashboardStats] = useState(null); // Dashboard statistics
 
   // Modal State
   const [isMining, setIsMining] = useState(false);
   const [miningStep, setMiningStep] = useState(0);
   const [notification, setNotification] = useState(null);
 
-  // Handle wallet connection during registration
+  // Clear feedback status when user logs out
+  useEffect(() => {
+    if (!user) {
+      console.log("🔄 User logged out, clearing feedback status");
+      setFeedbackStatus({});
+    }
+  }, [user]);
+
+  // Fetch dashboard stats for admin users
+  useEffect(() => {
+    const fetchDashboardStats = async () => {
+      if (user && user.role === 'admin' && currentView === 'dashboard') {
+        try {
+          const response = await fetch('http://localhost:4000/api/v1/course/dashboard/stats');
+          const data = await response.json();
+          
+          if (data.success) {
+            setDashboardStats(data.data);
+            console.log('📊 Dashboard stats loaded:', data.data);
+          }
+        } catch (error) {
+          console.error('Error fetching dashboard stats:', error);
+        }
+      }
+    };
+
+    fetchDashboardStats();
+  }, [user, currentView]);
+
+  // Handle wallet connection during registration/login
   useEffect(() => {
     if (isConnectingWallet && isConnected && walletAddress && pendingUser) {
-      handleWalletConnection();
+      // Don't auto-connect here, let WalletConnectionPage handle it via onWalletConnected callback
     }
   }, [isConnected, walletAddress, isConnectingWallet, pendingUser]);
 
-  const handleWalletConnection = async () => {
+  const handleWalletConnection = async (connectedWallet) => {
     try {
-      console.log('🔗 Connecting wallet:', walletAddress);
+      console.log('🔗 Connecting wallet:', connectedWallet);
+      
+      // Verify if pendingUser exists
+      if (!pendingUser) {
+        showNotification("error", "Session expired. Please login again.");
+        setIsConnectingWallet(false);
+        setPendingUser(null);
+        return;
+      }
       
       // Send wallet address to backend to save with user account
       const response = await fetch('http://localhost:4000/api/v1/user/link-wallet', {
@@ -62,18 +100,20 @@ export default function FeedbackApp() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${pendingUser.token}`
         },
+        credentials: 'include',
         body: JSON.stringify({
-          walletAddress: walletAddress,
-          email: pendingUser.email,
+          walletAddress: connectedWallet,
           userId: pendingUser.id
         })
       });
+
+      const data = await response.json();
 
       if (response.ok) {
         console.log("✅ Wallet linked successfully");
         const userData = {
           ...pendingUser,
-          walletAddress: walletAddress
+          walletAddress: connectedWallet
         };
         
         setUser(userData);
@@ -83,16 +123,21 @@ export default function FeedbackApp() {
         setPendingUser(null);
         setIsConnectingWallet(false);
       } else {
-        throw new Error('Failed to link wallet');
+        throw new Error(data.message || 'Failed to link wallet');
       }
     } catch (err) {
       console.error("❌ Error linking wallet:", err);
-      showNotification("error", "Failed to link wallet. Please try again.");
-      setIsConnectingWallet(false);
+      showNotification("error", err.message || "Failed to link wallet. Please try again.");
+      // Keep user on wallet connection page to allow retry
+      // Don't reset isConnectingWallet or pendingUser
     }
   };
 
   const handleLogin = async (role, id, token, department = null, email = null, isNewRegistration = false) => {
+    // Clear previous user's feedback status for fresh start
+    setFeedbackStatus({});
+    console.log("🔄 Cleared previous feedback status for new login");
+    
     // Validate token exists and is valid
     if (!token || token === 'undefined' || typeof token !== 'string' || token.length < 50) {
       showNotification("error", "Authentication failed: No valid token received");
@@ -117,49 +162,101 @@ export default function FeedbackApp() {
 
       if (userResponse.ok) {
         const userWalletData = await userResponse.json();
+        const userData = userWalletData.data;
         
-        // If user has a registered wallet
-        if (userWalletData.walletAddress) {
+        // NEW REGISTRATION: Always show wallet connection page
+        if (isNewRegistration) {
+          console.log("📝 New registration, redirecting to wallet connection");
+          setPendingUser({ 
+            role, 
+            id, 
+            token, 
+            department, 
+            email: userData.email,
+            isNewRegistration: true,
+            registeredWallet: null
+          });
+          setIsConnectingWallet(true);
+          return;
+        }
+        
+        // EXISTING USER LOGIN: Check if user has registered wallet
+        if (userData.walletAddress) {
+          console.log("🔍 Existing user with registered wallet:", userData.walletAddress);
+          
           // Check if wallet is connected
-          if (!isConnected) {
-            showNotification("error", "Please connect your wallet to proceed");
-            // Store temp user data and enable wallet connection flow
-            setPendingUser({ role, id, token, department, email });
+          if (!isConnected || !walletAddress) {
+            showNotification("info", `Please connect your registered wallet: ${userData.walletAddress.slice(0, 6)}...${userData.walletAddress.slice(-4)}`);
+            setPendingUser({ 
+              role, 
+              id, 
+              token, 
+              department, 
+              email: userData.email,
+              isNewRegistration: false,
+              registeredWallet: userData.walletAddress
+            });
             setIsConnectingWallet(true);
             return;
           }
           
-          // Check if connected wallet matches registered wallet
-          if (walletAddress.toLowerCase() !== userWalletData.walletAddress.toLowerCase()) {
-            showNotification("error", "Wallet address does not match registered wallet");
-            console.error("❌ Wallet mismatch:", { connected: walletAddress, registered: userWalletData.walletAddress });
+          // Verify connected wallet matches registered wallet
+          if (walletAddress.toLowerCase() !== userData.walletAddress.toLowerCase()) {
+            showNotification("error", `Wrong wallet! Please connect: ${userData.walletAddress.slice(0, 6)}...${userData.walletAddress.slice(-4)}`);
+            console.error("❌ Wallet mismatch:", { 
+              connected: walletAddress, 
+              registered: userData.walletAddress 
+            });
+            
+            // Disconnect and show wallet connection page
+            setPendingUser({ 
+              role, 
+              id, 
+              token, 
+              department, 
+              email: userData.email,
+              isNewRegistration: false,
+              registeredWallet: userData.walletAddress
+            });
+            setIsConnectingWallet(true);
             return;
           }
           
           console.log("✅ Wallet verified successfully");
-        } else if (!isNewRegistration) {
-          // Existing user without wallet - require wallet connection
-          showNotification("info", "Please connect your wallet to proceed");
-          setPendingUser({ role, id, token, department, email });
-          setIsConnectingWallet(true);
-          return;
+          
+          // Login successful with verified wallet
+          const completeUserData = { 
+            role, 
+            id, 
+            token, 
+            department, 
+            email: userData.email,
+            walletAddress: userData.walletAddress
+          };
+          
+          setUser(completeUserData);
+          localStorage.setItem('user', JSON.stringify(completeUserData));
+          setCurrentView("dashboard");
+          showNotification("success", "Login Successful");
+          
         } else {
-          // New registration - go to wallet connection page
-          console.log("📝 New registration, redirecting to wallet connection");
-          setPendingUser({ role, id, token, department, email });
+          // Existing user without wallet - require wallet connection
+          showNotification("info", "Please connect your wallet to complete account setup");
+          setPendingUser({ 
+            role, 
+            id, 
+            token, 
+            department, 
+            email: userData.email,
+            isNewRegistration: false,
+            registeredWallet: null
+          });
           setIsConnectingWallet(true);
           return;
         }
+      } else {
+        throw new Error("Failed to fetch user wallet info");
       }
-      
-      // Store user info and token in state and localStorage
-      const userData = { role, id, token, department, email };
-      console.log("✅ Storing user data:", { role, id: id.substring(0, 10) + "...", department });
-      
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
-      setCurrentView("dashboard");
-      showNotification("success", "Login Successful");
     } catch (err) {
       console.error("❌ Error during login:", err);
       showNotification("error", "Authentication error. Please try again.");
@@ -309,7 +406,14 @@ export default function FeedbackApp() {
         userName={pendingUser.role}
         userRole={pendingUser.role}
         userEmail={pendingUser.email}
+        isNewRegistration={pendingUser.isNewRegistration || false}
+        registeredWallet={pendingUser.registeredWallet || null}
         notification={notification}
+        onBackToLogin={() => {
+          setIsConnectingWallet(false);
+          setPendingUser(null);
+          showNotification("info", "Please login again");
+        }}
       />
     );
   }
@@ -322,13 +426,31 @@ export default function FeedbackApp() {
     </div>
   );
 
+  const handleLogout = () => {
+    console.log("🚪 Logging out user...");
+    
+    // Clear all user-specific state
+    setUser(null);
+    setFeedbackStatus({});
+    setSelectedCourse(null);
+    setPendingUser(null);
+    setIsConnectingWallet(false);
+    setCurrentView("dashboard");
+    
+    // Clear localStorage
+    localStorage.removeItem('user');
+    
+    console.log("✅ User logged out and all data cleared");
+    showNotification("success", "Logged out successfully");
+  };
+
   return (
     <div className="flex h-screen bg-[#0f172a] text-slate-100 font-sans overflow-hidden">
       <Sidebar
         user={user}
         currentView={currentView}
         setCurrentView={setCurrentView}
-        onLogout={() => setUser(null)}
+        onLogout={handleLogout}
       />
 
       {/* MAIN CONTENT AREA */}
@@ -425,7 +547,7 @@ export default function FeedbackApp() {
                     Total Students
                   </p>
                   <p className="text-4xl font-extrabold text-white">
-                    {blocks.length}
+                    {dashboardStats ? dashboardStats.totalStudents : '...'}
                   </p>
                   <div className="mt-4 flex items-center text-emerald-400 text-sm font-bold">
                     <TrendingUp className="w-4 h-4 mr-1" /> +12% this week
@@ -435,14 +557,16 @@ export default function FeedbackApp() {
                   <p className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">
                     Total Teachers
                   </p>
-                  <p className="text-4xl font-extrabold text-white">3</p>
+                  <p className="text-4xl font-extrabold text-white">
+                    {dashboardStats ? dashboardStats.totalTeachers : '...'}
+                  </p>
                 </div>
                 <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                   <p className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">
-                    Total Submiited Feedbacks
+                    Total Submitted Feedbacks
                   </p>
                   <p className="text-4xl font-extrabold text-emerald-400">
-                    99.9%
+                    {dashboardStats ? dashboardStats.totalSubmittedFeedbacks : '...'}
                   </p>
                 </div>
               </div>
@@ -452,7 +576,10 @@ export default function FeedbackApp() {
                   <h3 className="font-bold text-lg text-white">
                     Recent Feedbacks
                   </h3>
-                  <button className="text-indigo-400 text-sm font-bold hover:text-indigo-300">
+                  <button 
+                    onClick={() => setCurrentView("feedbackResults")}
+                    className="text-indigo-400 text-sm font-bold hover:text-indigo-300"
+                  >
                     View All
                   </button>
                 </div>
@@ -460,42 +587,42 @@ export default function FeedbackApp() {
                   <table className="w-full text-left">
                     <thead className="bg-slate-900/50">
                       <tr className="text-slate-400 text-xs uppercase tracking-wider">
-                        {/* <th className="py-4 px-6 font-medium">Hash</th> */}
                         <th className="py-4 px-6 font-medium">Student Name</th>
-                        {/* <th className="py-4 px-6 font-medium">Block</th> */}
                         <th className="py-4 px-6 font-medium">Index no.</th>
                         <th className="py-4 px-6 font-medium">Time</th>
                         <th className="py-4 px-6 font-medium">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700">
-                      {blocks.slice(0, 5).map((block) => (
-                        <tr
-                          key={block.id}
-                          className="hover:bg-slate-700/30 transition-colors"
-                        >
-                          {/* <td className="py-4 px-6 font-mono text-indigo-400 text-xs">
-                            <div className="flex items-center space-x-2">
-                              <span>{block.hash.substring(0, 12)}...</span>
-                              <Copy className="w-3 h-3 cursor-pointer hover:text-white" />
-                            </div>
-                          </td> */}
-                          <td className="py-4 px-6 font-mono text-indigo-400 text-xs">
-                            #{block.Name}
-                          </td>
-                          <td className="py-4 px-6 text-white font-mono">
-                            #{block.id}
-                          </td>
-                          <td className="py-4 px-6 text-slate-400 text-sm">
-                            {block.timestamp}
-                          </td>
-                          <td className="py-4 px-6">
-                            <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-xs font-bold">
-                              Confirmed
-                            </span>
+                      {dashboardStats && dashboardStats.recentFeedbacks && dashboardStats.recentFeedbacks.length > 0 ? (
+                        dashboardStats.recentFeedbacks.map((feedback) => (
+                          <tr
+                            key={feedback.id}
+                            className="hover:bg-slate-700/30 transition-colors"
+                          >
+                            <td className="py-4 px-6 font-mono text-indigo-400 text-xs">
+                              #{feedback.studentName}
+                            </td>
+                            <td className="py-4 px-6 text-white font-mono">
+                              #{feedback.id}
+                            </td>
+                            <td className="py-4 px-6 text-slate-400 text-sm">
+                              {feedback.timestamp}
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-xs font-bold">
+                                {feedback.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="4" className="py-8 text-center text-slate-400">
+                            {dashboardStats ? 'No feedbacks submitted yet' : 'Loading...'}
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>

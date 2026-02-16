@@ -43,7 +43,17 @@ const UserSchema = new Schema(
   blockchainBlockNumber: {
     type: Number,
     default: null
-  }
+  },
+  feedbackSubmissions: [{
+    courseId: Number,
+    courseName: String,
+    teacherId: String,
+    teaching: Boolean,
+    communication: Boolean,
+    fairness: Boolean,
+    engagement: Boolean,
+    submittedAt: Date
+  }]
 },
 {timestamps:true});//this is give create at and updated at
 

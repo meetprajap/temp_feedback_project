@@ -166,11 +166,22 @@ export default function StudentCourseSelector({ onCourseSelect, feedbackStatus: 
 
   // Sync with parent feedbackStatus when it changes
   useEffect(() => {
-    if (parentFeedbackStatus) {
-      console.log("👁️ Updated feedbackStatus:", parentFeedbackStatus);
+    if (parentFeedbackStatus !== undefined) {
+      console.log("👁️ Updated feedbackStatus from parent:", parentFeedbackStatus);
+      
+      // Always sync with parent - if parent is empty, clear local too
       setFeedbackStatus(parentFeedbackStatus);
+      
+      // If parent cleared the status (empty object) but we had data, this is a user change
+      const parentIsEmpty = Object.keys(parentFeedbackStatus).length === 0;
+      const localHasData = Object.keys(feedbackStatus).length > 0;
+      
+      if (parentIsEmpty && localHasData) {
+        console.log("🔄 Detected user change - local feedback status cleared");
+        // The setFeedbackStatus above will clear it
+      }
     }
-  }, [parentFeedbackStatus]);
+  }, [parentFeedbackStatus, feedbackStatus]);
 
   // Fetch all courses
   useEffect(() => {
@@ -180,7 +191,9 @@ export default function StudentCourseSelector({ onCourseSelect, feedbackStatus: 
         const userData = JSON.parse(localStorage.getItem('user'));
         const token = userData?.token;
         const department = userData?.department;
+        const userId = userData?.id;
 
+        console.log("📚 Fetching courses for user:", userId);
         setUserDepartment(department);
 
         let courseUrl = `${API_BASE_URL}/`;

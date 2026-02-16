@@ -61,7 +61,7 @@ export default function LoginScreen({ onLogin }) {
         throw new Error("Invalid response: Missing token or user data");
       }
 
-      onLogin("admin", data.data.user._id, data.data.accessToken);
+      onLogin("admin", data.data.user._id, data.data.accessToken, null, data.data.user.email, false);
       setLoading(false);
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");
