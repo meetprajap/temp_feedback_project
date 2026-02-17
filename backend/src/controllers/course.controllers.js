@@ -40,7 +40,7 @@ const createCourse = requestHandler(async (req, res) => {
       courseId: courseId.toString(),
       courseName: courseName,
       teachers: teachersData
-    });
+    }, req.user?.walletAddress || null);
 
     console.log(`✅ Course and teachers registered on blockchain with hash: ${txHash}`);
 
@@ -134,10 +134,15 @@ const getCoursesByBranch = requestHandler(async (req, res) => {
     
     console.log(`✅ Retrieved ${courses.length} courses from blockchain for branch: ${branch}`);
     
-    // Return all courses - frontend will filter by department if needed
-    // Blockchain doesn't store branch/department information
+    // Attach requested branch so frontend filtering works
+    const coursesWithBranch = courses.map(course => ({
+      ...course,
+      branch: branch
+    }));
+
+    // Return all courses - blockchain doesn't store branch/department information
     return res.status(200).json(
-      new ApiResponse(200, courses, `Courses retrieved from blockchain. Total: ${courses.length}`)
+      new ApiResponse(200, coursesWithBranch, `Courses retrieved from blockchain. Total: ${coursesWithBranch.length}`)
     );
   } catch (error) {
     console.error(`❌ Error fetching courses:`, error.message);

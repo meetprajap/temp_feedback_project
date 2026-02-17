@@ -37,10 +37,12 @@ export default function FeedbackResults() {
     try {
       const userData = JSON.parse(localStorage.getItem("user"));
       const token = userData?.token;
+      const walletAddress = userData?.walletAddress;
       
       const response = await fetch(`${API_BASE_URL}/all-feedbacks`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          "x-wallet-address": walletAddress || ""
         },
       });
       const data = await response.json();
@@ -82,6 +84,7 @@ export default function FeedbackResults() {
       const results = {};
       const userData = JSON.parse(localStorage.getItem("user"));
       const token = userData?.token;
+      const walletAddress = userData?.walletAddress;
 
       for (const teacher of teachers) {
         const teacherId = teacher.teacherId || teacher.id;
@@ -93,6 +96,7 @@ export default function FeedbackResults() {
             {
               headers: {
                 Authorization: `Bearer ${token}`,
+                "x-wallet-address": walletAddress || ""
               },
             }
           );

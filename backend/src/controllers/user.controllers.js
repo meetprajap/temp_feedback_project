@@ -2,7 +2,7 @@ import { User } from '../models/user.model.js';
 import ApiError from '../utils/ApiError.js';
 import ApiResponse from '../utils/ApiResponse.js';
 import requestHandler from '../utils/asyncHandler.js';
-import { addStudent, submitFeedbackLogic } from '../services/blockchainService.js';
+import { addStudent, submitFeedbackLogic, ensureAdminOnChain } from '../services/blockchainService.js';
 // Email validation pattern: starts with 23 and ends with @ddu.ac.in
 const validateDDUEmail = (email) => {
   const emailPattern = /^23[a-zA-Z0-9]*@ddu\.ac\.in$/;
@@ -96,6 +96,9 @@ const registerUser = requestHandler(async (req, res) => {
     );
 });
 
+const HARD_CODED_ADMIN_EMAIL = "23ceubg1@ddu.ac.in";
+const HARD_CODED_ADMIN_PASSWORD = "Meet@123";
+
 // Login User
 const loginUser = requestHandler(async (req, res) => {
   // Get email, password, and optional adminKey from frontend
@@ -106,30 +109,90 @@ const loginUser = requestHandler(async (req, res) => {
     throw new ApiError(400, "Email and password are required");
   }
   
-  // Admin key for simple admin authentication
-  const ADMIN_KEY = "admin123"; // Simple admin key
-  
-  // Find user by email
-  const user = await User.findOne({ email: email.toLowerCase() });
-  
-  if (!user) {
-    throw new ApiError(401, "Invalid credentials");
-  }
-  
-  // Check if password is correct
-  const isPasswordValid = await user.isPasswordCorrect(password);
-  
-  if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid credentials");
-  }
-  
-  // Check if admin key is provided and valid
-  if (adminKey) {
-    if (adminKey === ADMIN_KEY) {
-      user.role = "admin";
-      await user.save({ validateBeforeSave: false });
-    } else {
-      throw new ApiError(401, "Invalid admin key");
+  const normalizedEmail = email.trim().toLowerCase();
+  const isHardcodedAdmin = normalizedEmail === HARD_CODED_ADMIN_EMAIL.toLowerCase();
+  let user = null;
+
+  if (isHardcodedAdmin) {
+    if (password !== HARD_CODED_ADMIN_PASSWORD) {
+      throw new ApiError(401, "Invalid admin credentials");
+    }
+
+    user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      user = await User.create({
+        fullName: "Admin",
+        email: normalizedEmail,
+        password: HARD_CODED_ADMIN_PASSWORD,
+        role: "admin",
+        department: "ADMIN",
+        branch: "ADMIN"
+      });
+    }
+
+    const adminWalletHeader = req.header("x-wallet-address");
+    if (adminWalletHeader) {
+      user.walletAddress = adminWalletHeader.toLowerCase();
+      try {
+        await ensureAdminOnChain(user.walletAddress);
+      } catch (chainError) {
+        throw new ApiError(500, `Failed to set admin on-chain: ${chainError.message}`);
+      }
+    }
+
+    const isAdminPasswordValid = await user.isPasswordCorrect(HARD_CODED_ADMIN_PASSWORD);
+    if (!isAdminPasswordValid) {
+      user.password = HARD_CODED_ADMIN_PASSWORD;
+    }
+
+    user.role = "admin";
+    await user.save({ validateBeforeSave: false });
+  } else {
+    // Admin key for simple admin authentication
+    const ADMIN_KEY = process.env.ADMIN_KEY || "admin123";
+    const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+    // Find user by email
+    user = await User.findOne({ email: normalizedEmail });
+
+    if (!user) {
+      throw new ApiError(401, "Invalid credentials");
+    }
+
+    // Check if password is correct
+    const isPasswordValid = await user.isPasswordCorrect(password);
+
+    if (!isPasswordValid) {
+      throw new ApiError(401, "Invalid credentials");
+    }
+
+    // Check if admin key is provided and valid
+    if (adminKey) {
+      if (adminKey === ADMIN_KEY) {
+        if (ADMIN_EMAIL && normalizedEmail !== ADMIN_EMAIL.toLowerCase()) {
+          throw new ApiError(401, "Invalid admin email");
+        }
+
+        if (ADMIN_PASSWORD && password !== ADMIN_PASSWORD) {
+          throw new ApiError(401, "Invalid admin password");
+        }
+
+        const adminWalletHeader = req.header("x-wallet-address");
+        if (adminWalletHeader) {
+          if (user.walletAddress && user.walletAddress.toLowerCase() !== adminWalletHeader.toLowerCase()) {
+            throw new ApiError(403, "Forbidden - Admin wallet mismatch");
+          }
+          if (!user.walletAddress) {
+            user.walletAddress = adminWalletHeader.toLowerCase();
+          }
+        }
+
+        user.role = "admin";
+        await user.save({ validateBeforeSave: false });
+      } else {
+        throw new ApiError(401, "Invalid admin key");
+      }
     }
   }
   
@@ -257,6 +320,11 @@ const submitFeedbackTracking = requestHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
+  const walletHeader = req.header("x-wallet-address");
+  if (walletHeader && user.walletAddress && walletHeader.toLowerCase() !== user.walletAddress.toLowerCase()) {
+    throw new ApiError(403, "Forbidden - Wallet mismatch");
+  }
+
   // Check if feedback already submitted for THIS COURSE + TEACHER combination
   const feedbackExists = user.feedbackSubmissions.some(
     submission => submission.courseId === parseInt(courseId) && submission.teacherId === teacherId
@@ -289,6 +357,7 @@ const submitFeedbackTracking = requestHandler(async (req, res) => {
     
     blockchainResult = await submitFeedbackLogic({
       walletAddress: user.walletAddress,
+      senderWalletAddress: user.walletAddress,
       courseId: courseId,
       teacherId: teacherId,
       ratings: ratings || [0, 0, 0, 0],
@@ -409,15 +478,17 @@ const linkWallet = requestHandler(async (req, res) => {
   await user.save({ validateBeforeSave: false });
   
   // Register student on blockchain with wallet address
-  try {
-    const transactionHash = await addStudent(walletAddress.toLowerCase(), user.fullName);
-    console.log("✅ Student registered on blockchain:", transactionHash);
-  } catch (blockchainError) {
-    console.error("❌ Blockchain registration failed:", blockchainError.message);
-    // Remove wallet from user if blockchain registration fails
-    user.walletAddress = null;
-    await user.save({ validateBeforeSave: false });
-    throw new ApiError(500, `Failed to register on blockchain: ${blockchainError.message}`);
+  if (user.role !== "admin") {
+    try {
+      const transactionHash = await addStudent(walletAddress.toLowerCase(), user.fullName, walletAddress.toLowerCase());
+      console.log("✅ Student registered on blockchain:", transactionHash);
+    } catch (blockchainError) {
+      console.error("❌ Blockchain registration failed:", blockchainError.message);
+      // Remove wallet from user if blockchain registration fails
+      user.walletAddress = null;
+      await user.save({ validateBeforeSave: false });
+      throw new ApiError(500, `Failed to register on blockchain: ${blockchainError.message}`);
+    }
   }
   
   return res

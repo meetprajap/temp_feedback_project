@@ -121,6 +121,8 @@ export default function CourseManagement() {
         method,
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${JSON.parse(localStorage.getItem('user'))?.token}`,
+          "x-wallet-address": JSON.parse(localStorage.getItem('user'))?.walletAddress || ""
         },
         body: JSON.stringify({
           courseId: formData.courseId,
@@ -193,6 +195,10 @@ export default function CourseManagement() {
     try {
       const response = await fetch(`${API_BASE_URL}/${courseId}`, {
         method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${JSON.parse(localStorage.getItem('user'))?.token}`,
+          "x-wallet-address": JSON.parse(localStorage.getItem('user'))?.walletAddress || ""
+        }
       });
 
       const data = await response.json();

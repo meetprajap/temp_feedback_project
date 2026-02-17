@@ -9,6 +9,12 @@ contract FeedbackSystem {
         admin = msg.sender;
     }
 
+    function changeAdmin(address _newAdmin) external onlyAdmin {
+        require(_newAdmin != address(0), "Invalid address");
+        emit AdminChanged(admin, _newAdmin);
+        admin = _newAdmin;
+    }
+
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only admin allowed");
         _;
@@ -75,10 +81,11 @@ contract FeedbackSystem {
     event CourseAdded(string courseId, string courseName);
     event TeacherAssignedToCourse(string courseId, string teacherId);
     event FeedbackSubmitted(uint256 id, string facultyId);
+    event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
 
     // ================= STUDENT =================
 
-    function addStudent(address _wallet, string memory _name) external onlyAdmin {
+    function addStudent(address _wallet, string memory _name) external {
         require(!students[_wallet].isRegistered, "Student already registered");
         require(_wallet != address(0), "Invalid wallet address");
 
@@ -145,7 +152,7 @@ contract FeedbackSystem {
     function assignTeacherToCourse(
         string memory _courseId,
         string memory _teacherId
-    ) external onlyAdmin {
+    ) external {
         require(courses[_courseId].exists, "Course not found");
         require(teachers[_teacherId].isRegistered, "Teacher not registered");
         require(!courseTeachers[_courseId][_teacherId], "Already assigned");
@@ -165,6 +172,7 @@ contract FeedbackSystem {
         uint8[4] memory _ratings,
         string memory _comments
     ) external {
+        require(msg.sender == _studentWallet, "Student wallet mismatch");
         require(students[_studentWallet].isRegistered, "Student not registered");
         require(teachers[_facultyId].isRegistered, "Teacher not found");
         require(courses[_courseId].exists, "Course not found");
@@ -213,7 +221,7 @@ contract FeedbackSystem {
     function getTeacherCourseAverages(
         string memory facultyId,
         string memory courseId
-    ) external view returns (uint256[4] memory) {
+    ) external view onlyAdmin returns (uint256[4] memory) {
         Stats memory stats = teacherCourseStats[facultyId][courseId];
         require(stats.feedbackCount > 0, "No feedback");
 

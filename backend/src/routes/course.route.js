@@ -12,11 +12,12 @@ import {
 } from "../controllers/course.controllers.js";
 import { Router } from 'express';
 import { getAllFeedbacksFromBlockchain } from '../services/blockchainService.js';
+import { verifyJWT, requireAdmin, requireAdminWallet } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
 // Debug endpoint to see blockchain feedbacks
-router.get("/debug-feedbacks", async (req, res) => {
+router.get("/debug-feedbacks", verifyJWT, requireAdmin, requireAdminWallet, async (req, res) => {
   try {
     const feedbacks = await getAllFeedbacksFromBlockchain();
     console.log("🔍 DEBUG - RAW Feedbacks from blockchain:");
@@ -52,24 +53,24 @@ router.get("/debug-feedbacks", async (req, res) => {
 router.route("/").get(getAllCourses);
 
 // Dashboard stats (Admin) - must be before /:courseId
-router.route("/dashboard/stats").get(getDashboardStats);
+router.route("/dashboard/stats").get(verifyJWT, requireAdmin, requireAdminWallet, getDashboardStats);
 
 // Get all feedbacks from blockchain (Admin) - must be before /:courseId
-router.route("/all-feedbacks").get(getAllFeedbacks);
+router.route("/all-feedbacks").get(verifyJWT, requireAdmin, requireAdminWallet, getAllFeedbacks);
 
 // Get submission tracking from MongoDB (Admin) - must be before /:courseId
-router.route("/submission-tracking").get(getSubmissionTracking);
+router.route("/submission-tracking").get(verifyJWT, requireAdmin, requireAdminWallet, getSubmissionTracking);
 
 // Course by ID and branch - with dynamic params after static routes
 router.route("/:courseId").get(getCourseById);
 router.route("/branch/:branch").get(getCoursesByBranch);
 
 // Get teacher course feedback results (Admin)
-router.route("/results/:courseId/:teacherId").get(getTeacherCourseResults);
+router.route("/results/:courseId/:teacherId").get(verifyJWT, requireAdmin, requireAdminWallet, getTeacherCourseResults);
 
 // Admin only routes - Create, Update, Delete courses
-router.route("/").post(createCourse);
-router.route("/:courseId").put(updateCourse);
-router.route("/:courseId").delete(deleteCourse);
+router.route("/").post(verifyJWT, requireAdmin, requireAdminWallet, createCourse);
+router.route("/:courseId").put(verifyJWT, requireAdmin, requireAdminWallet, updateCourse);
+router.route("/:courseId").delete(verifyJWT, requireAdmin, requireAdminWallet, deleteCourse);
 
 export default router;

@@ -16,10 +16,18 @@ import { User } from '../models/user.model.js';
 const FeedbackABIModule = require('../services/FeedbackABI.json');
 // FeedbackABI.json is an array directly, not an object with .abi property
 const FeedbackContractABI = Array.isArray(FeedbackABIModule) ? FeedbackABIModule : FeedbackABIModule.abi;
-const contractAddress = '0x1ad358902c1551c66C396cd399948A7808ae478D'; // Replace with your deployed address
+const contractAddress = process.env.CONTRACT_ADDRESS || '0xCF0E1579D9389b51c5D7e3d64E6c987eD735FeCe'; // Replace with your deployed address
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "23ceubg1@ddu.ac.in";
+
+if (process.env.ADMIN_PRIVATE_KEY) {
+  const normalizedKey = process.env.ADMIN_PRIVATE_KEY.startsWith("0x")
+    ? process.env.ADMIN_PRIVATE_KEY
+    : `0x${process.env.ADMIN_PRIVATE_KEY}`;
+  web3.eth.accounts.wallet.add(normalizedKey);
+}
 
 // Assuming you have a default account/wallet configured to send transactions
-const adminAccount = '0xe1cf778613474e0fe203264211346555bca2f58b';
+
 
 // Initialize contract only if web3 is properly configured
 let feedbackContract = null;
@@ -30,22 +38,133 @@ if (web3 && web3.eth) {
 // Temporary storage for feedback data (not persisted to MongoDB)
 let tempFeedbackStorage = [];
 
+const resolveAdminWalletAddress = async () => {
+  if (process.env.ADMIN_WALLET) {
+    return process.env.ADMIN_WALLET.toLowerCase();
+  }
+
+  const adminUser = await User.findOne({ email: ADMIN_EMAIL.toLowerCase() }).select("walletAddress");
+  return adminUser?.walletAddress ? adminUser.walletAddress.toLowerCase() : null;
+};
+
+const requireAdminWalletAddress = async () => {
+  const adminWallet = await resolveAdminWalletAddress();
+  if (!adminWallet) {
+    throw new Error("Admin wallet not set. Connect the admin wallet first.");
+  }
+  return adminWallet;
+};
+
+const resolvePreferredSender = async (preferredAddress, label = "Sender") => {
+  if (!preferredAddress) {
+    throw new Error(`${label} address is required`);
+  }
+
+  const normalized = preferredAddress.toLowerCase();
+  const localAccounts = await web3.eth.getAccounts();
+  const hasLocal = localAccounts.some((addr) => addr.toLowerCase() === normalized);
+  const hasWallet = Boolean(web3.eth.accounts.wallet.get(normalized));
+
+  if (hasLocal || hasWallet) {
+    return normalized;
+  }
+
+  throw new Error(
+    `${label} not available in the node. Import this account into Ganache or set ADMIN_PRIVATE_KEY for the backend.`
+  );
+};
+
+const resolveOnChainAdmin = async () => {
+  if (!feedbackContract) {
+    throw new Error("Feedback contract not initialized");
+  }
+  const admin = await feedbackContract.methods.admin().call();
+  return admin?.toLowerCase();
+};
+
+const resolveAdminSender = async () => {
+  const onChainAdmin = await resolveOnChainAdmin();
+  return resolvePreferredSender(onChainAdmin, "On-chain admin");
+};
+
+const resolveAdminCaller = async () => {
+  const onChainAdmin = await resolveOnChainAdmin();
+  if (!onChainAdmin) {
+    throw new Error("On-chain admin address not found");
+  }
+  return onChainAdmin;
+};
+
+const ensureAdminSender = async (providedAddress = null) => {
+  let adminSender = await resolveAdminSender();
+
+  if (providedAddress && providedAddress.toLowerCase() !== adminSender.toLowerCase()) {
+    try {
+      await ensureAdminOnChain(providedAddress);
+      adminSender = await resolveAdminSender();
+    } catch (error) {
+      throw new Error(`Only on-chain admin wallet can perform this action: ${error.message}`);
+    }
+  }
+
+  return adminSender;
+};
+
+const ensureAdminOnChain = async (newAdminWallet) => {
+  if (!feedbackContract) {
+    throw new Error("Feedback contract not initialized");
+  }
+
+  if (!feedbackContract.methods?.admin || !feedbackContract.methods?.changeAdmin) {
+    throw new Error("Contract ABI missing admin/changeAdmin. Redeploy with changeAdmin and update ABI.");
+  }
+
+  const normalizedWallet = newAdminWallet?.toLowerCase();
+  if (!normalizedWallet) {
+    throw new Error("Admin wallet address is required");
+  }
+
+  const currentAdmin = await resolveOnChainAdmin();
+  if (currentAdmin === normalizedWallet) {
+    return { updated: false, currentAdmin };
+  }
+
+  const sender = await resolvePreferredSender(currentAdmin, "On-chain admin");
+  const receipt = await feedbackContract.methods.changeAdmin(normalizedWallet).send({
+    from: sender,
+    gas: 200000
+  });
+
+  return {
+    updated: true,
+    previousAdmin: currentAdmin,
+    newAdmin: normalizedWallet,
+    txHash: receipt.transactionHash
+  };
+};
+
 /**
  * Calls the addStudent function on the Feedback smart contract
  * @param {string} walletAddress - The wallet address to register
  * @param {string} studentName - The name associated with the wallet
+ * @param {string} [fromWallet] - Optional sender wallet for the transaction
  * @returns {Promise<string>} The transaction hash
  */
-const addStudent = async (walletAddress, studentName) => {
+const addStudent = async (walletAddress, studentName, fromWallet = null) => {
   try {
+    if (!feedbackContract) {
+      throw new Error("Feedback contract not initialized");
+    }
+
     console.log(`📝 Registering student on blockchain:`, {
       wallet: walletAddress,
       name: studentName
     });
 
     // Call smart contract addStudent(wallet, name)
+    const senderWallet = fromWallet || walletAddress;
     const receipt = await feedbackContract.methods.addStudent(walletAddress, studentName)
-      .send({ from: adminAccount, gasLimit: 300000 });
+      .send({ from: senderWallet, gasLimit: 300000 });
 
     console.log('✅ Student registered on blockchain! Hash:', receipt.transactionHash);
     return receipt.transactionHash;
@@ -62,8 +181,12 @@ const addStudent = async (walletAddress, studentName) => {
  * @param {string} teacherName - The teacher name to register on blockchain
  * @returns {Promise<string>} The transaction hash
  */
-const addTeacher = async (teacherId, teacherName) => {
+const addTeacher = async (teacherId, teacherName, fromWallet = null) => {
   try {
+    if (!feedbackContract) {
+      throw new Error("Feedback contract not initialized");
+    }
+
     if (!teacherId || !teacherName) {
       throw new Error("teacherId and teacherName are required");
     }
@@ -77,8 +200,9 @@ const addTeacher = async (teacherId, teacherName) => {
     });
 
     // Call addTeacher on blockchain
+    const adminWallet = await ensureAdminSender(fromWallet);
     const receipt = await feedbackContract.methods.addTeacher(formattedTeacherId, formattedTeacherName)
-      .send({ from: adminAccount, gasLimit: 300000 });
+      .send({ from: adminWallet, gasLimit: 300000 });
 
     console.log('✅ Teacher registered on blockchain! Hash:', receipt.transactionHash);
     return receipt.transactionHash;
@@ -89,8 +213,12 @@ const addTeacher = async (teacherId, teacherName) => {
   }
 };
 
-const createCourseblock = async (course) => {
+const createCourseblock = async (course, fromWallet = null) => {
   try {
+    if (!feedbackContract) {
+      throw new Error("Feedback contract not initialized");
+    }
+
     const courseId = course.courseId.toString();
     const courseName = course.courseName;
     const teachers = course.teachers; // ARRAY of teacher objects with teacherId and teacherName
@@ -127,7 +255,7 @@ const createCourseblock = async (course) => {
           const teacherName = teacher.teacherName.toString().trim();
           
           console.log(`   - Registering teacher: ${teacherName} (ID: ${teacherId})`);
-          await addTeacher(teacherId, teacherName);
+          await addTeacher(teacherId, teacherName, fromWallet);
           console.log(`   ✅ Teacher registered on blockchain successfully`);
         } catch (error) {
           console.warn(`   ⚠️  Could not register teacher on blockchain, continuing:`, error.message);
@@ -138,10 +266,11 @@ const createCourseblock = async (course) => {
 
     // Add course on blockchain
     console.log(`🔗 Adding course to blockchain...`);
+    const adminWallet = await ensureAdminSender(fromWallet);
     const receipt = await feedbackContract.methods
       .addCourse(courseId, courseName)
       .send({
-        from: adminAccount,
+        from: adminWallet,
         gas: 300000
       });
 
@@ -158,7 +287,7 @@ const createCourseblock = async (course) => {
           await feedbackContract.methods
             .assignTeacherToCourse(courseId, teacherId)
             .send({
-              from: adminAccount,
+              from: adminWallet,
               gas: 200000
             });
 
@@ -187,6 +316,7 @@ import ApiResponse from '../utils/ApiResponse.js';
 const submitFeedbackLogic = async (feedbackData) => {
   const {
     walletAddress,
+    senderWalletAddress,
     courseId,
     teacherId,
     ratings,
@@ -234,6 +364,7 @@ const submitFeedbackLogic = async (feedbackData) => {
     console.log(`   Course ID: ${courseId}`);
     console.log(`   Ratings: ${formattedRatings.join(', ')}`);
 
+    const adminWallet = await resolveAdminWalletAddress();
     const receipt = await feedbackContract.methods
       .submitFeedback(
         walletAddress,
@@ -243,7 +374,7 @@ const submitFeedbackLogic = async (feedbackData) => {
         comments || ""
       )
       .send({
-        from: process.env.ADMIN_WALLET || adminAccount,
+        from: senderWalletAddress || walletAddress || adminWallet,
         gas: 500000
       });
 
@@ -286,7 +417,7 @@ const getTeacherCourseAveragesFromBlockchain = async (teacherId, courseId) => {
     try {
       averages = await feedbackContract.methods
         .getTeacherCourseAverages(teacherId, courseId)
-        .call({ from: adminAccount });
+        .call({ from: await resolveAdminCaller() });
     } catch (contractError) {
       console.error(`❌ Smart contract call failed:`, contractError.message);
       // Check if it's a revert reason message
@@ -317,7 +448,7 @@ const getAllFeedbacksFromBlockchain = async () => {
     
     const feedbacks = await feedbackContract.methods
       .getAllFeedbacks()
-      .call({ from: adminAccount });
+      .call({ from: await resolveAdminCaller() });
 
     console.log(`✅ Retrieved ${feedbacks.length} feedbacks:`, feedbacks);
     
@@ -348,8 +479,6 @@ const clearTempFeedbackStorage = requestHandler(async (req, res) => {
     }, "Temporary feedback storage cleared")
   );
 });
-
-export { addStudent, addTeacher, createCourseblock, submitFeedback, submitFeedbackLogic, getTempFeedbackStorage, clearTempFeedbackStorage, getTeacherCourseAveragesFromBlockchain, getAllFeedbacksFromBlockchain, getCourseFromBlockchain, getCoursesFromBlockchain, getCourseTeachersFromBlockchain };
 
 // Get course details from blockchain
 const getCourseFromBlockchain = async (courseId) => {
@@ -466,7 +595,7 @@ const getCoursesFromBlockchain = async (courseIds = []) => {
     throw error;
   }
 };
-{ from: adminAccount }
+
 // Get teachers assigned to a course
 const getCourseTeachersFromBlockchain = async (courseId) => {
   try {
@@ -476,11 +605,11 @@ const getCourseTeachersFromBlockchain = async (courseId) => {
 
     console.log(`📚 Fetching teachers for course ${courseId} from blockchain...`);
     
-    const teacherIds = await feedbackContract.methods.courseTeacherList(courseId).call({ from: adminAccount });
+    const teacherIds = await feedbackContract.methods.courseTeacherList(courseId).call();
     
     const teachers = [];
     for (const teacherId of teacherIds) {
-      const teacher = await feedbackContract.methods.teachers(teacherId).call({ from: adminAccount });
+      const teacher = await feedbackContract.methods.teachers(teacherId).call();
       if (teacher.isRegistered) {
         teachers.push({
           teacherId: teacher.teacherId,
@@ -497,3 +626,5 @@ const getCourseTeachersFromBlockchain = async (courseId) => {
     throw error;
   }
 };
+
+export { addStudent, addTeacher, createCourseblock, submitFeedback, submitFeedbackLogic, getTempFeedbackStorage, clearTempFeedbackStorage, getTeacherCourseAveragesFromBlockchain, getAllFeedbacksFromBlockchain, getCourseFromBlockchain, getCoursesFromBlockchain, getCourseTeachersFromBlockchain, ensureAdminOnChain };

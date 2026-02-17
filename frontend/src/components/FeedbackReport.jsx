@@ -41,6 +41,7 @@ export default function FeedbackReport() {
       // Fetch all submission tracking by default
       try {
         const token = JSON.parse(localStorage.getItem('user'))?.token;
+        const walletAddress = JSON.parse(localStorage.getItem('user'))?.walletAddress;
         console.log('🔑 Token exists:', !!token);
         
         if (token) {
@@ -49,7 +50,8 @@ export default function FeedbackReport() {
             `${API_BASE_URL}/submission-tracking`,
             {
               headers: {
-                "Authorization": `Bearer ${token}`
+                "Authorization": `Bearer ${token}`,
+                "x-wallet-address": walletAddress || ""
               }
             }
           );
@@ -85,6 +87,7 @@ export default function FeedbackReport() {
     
     try {
       const token = JSON.parse(localStorage.getItem('user'))?.token;
+      const walletAddress = JSON.parse(localStorage.getItem('user'))?.walletAddress;
       if (!token) {
         setError("Not authenticated");
         setLoading(false);
@@ -95,7 +98,8 @@ export default function FeedbackReport() {
         `${USER_API_BASE_URL}/course-feedback/${course.courseId}`,
         {
           headers: {
-            "Authorization": `Bearer ${token}`
+            "Authorization": `Bearer ${token}`,
+            "x-wallet-address": walletAddress || ""
           }
         }
       );
@@ -122,6 +126,7 @@ export default function FeedbackReport() {
     
     try {
       const token = JSON.parse(localStorage.getItem('user'))?.token;
+      const walletAddress = JSON.parse(localStorage.getItem('user'))?.walletAddress;
       if (!token) {
         setError("Not authenticated");
         setLoading(false);
@@ -133,7 +138,8 @@ export default function FeedbackReport() {
         `${API_BASE_URL}/submission-tracking`,
         {
           headers: {
-            "Authorization": `Bearer ${token}`
+            "Authorization": `Bearer ${token}`,
+            "x-wallet-address": walletAddress || ""
           }
         }
       );

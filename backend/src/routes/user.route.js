@@ -2,7 +2,7 @@ import { registerUser, loginUser, logoutUser, checkFeedbackStatus, getStudentFee
 import { getTempFeedbackStorage, clearTempFeedbackStorage } from "../services/blockchainService.js";
 import { Router } from 'express'
 
-import { verifyJWT } from "../middleware/auth.middleware.js";
+import { verifyJWT, requireAdmin, requireAdminWallet } from "../middleware/auth.middleware.js";
 
 const router = Router()
 
@@ -30,16 +30,16 @@ router.route("/feedback-submissions").get(verifyJWT, getStudentFeedbackStatus)
 router.route("/submit-feedback").post(verifyJWT, submitFeedbackTracking)
 
 // Get feedback submissions for a specific course (Admin) - Private
-router.route("/course-feedback/:courseId").get(verifyJWT, getCourseFeedbackStatus)
+router.route("/course-feedback/:courseId").get(verifyJWT, requireAdmin, requireAdminWallet, getCourseFeedbackStatus)
 
 // Get all feedback submissions (Admin) - Private
-router.route("/all-feedback").get(verifyJWT, getAllFeedbackStatus)
+router.route("/all-feedback").get(verifyJWT, requireAdmin, requireAdminWallet, getAllFeedbackStatus)
 
 // Get temporary feedback storage (Admin/Debug) - Private
-router.route("/temp-feedback-storage").get(verifyJWT, getTempFeedbackStorage)
+router.route("/temp-feedback-storage").get(verifyJWT, requireAdmin, requireAdminWallet, getTempFeedbackStorage)
 
 // Clear temporary feedback storage (Admin/Debug) - Private
-router.route("/clear-temp-storage").delete(verifyJWT, clearTempFeedbackStorage)
+router.route("/clear-temp-storage").delete(verifyJWT, requireAdmin, requireAdminWallet, clearTempFeedbackStorage)
 
 export default router
 

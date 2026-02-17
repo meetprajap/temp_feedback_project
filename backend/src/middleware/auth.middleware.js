@@ -59,3 +59,36 @@ export const verifyJWT = requestHandler(async (req, res, next) => {
     throw new ApiError(401, error?.message || "Unauthorized - Invalid token");
   }
 });
+
+export const requireAdmin = requestHandler(async (req, res, next) => {
+  if (!req.user) {
+    throw new ApiError(401, "Unauthorized - User not found");
+  }
+
+  if (req.user.role !== "admin") {
+    throw new ApiError(403, "Forbidden - Admin access required");
+  }
+
+  next();
+});
+
+export const requireAdminWallet = requestHandler(async (req, res, next) => {
+  if (!req.user) {
+    throw new ApiError(401, "Unauthorized - User not found");
+  }
+
+  if (!req.user.walletAddress) {
+    throw new ApiError(403, "Forbidden - Admin wallet not linked");
+  }
+
+  const walletHeader = req.header("x-wallet-address");
+  if (!walletHeader) {
+    throw new ApiError(400, "Wallet address required");
+  }
+
+  if (walletHeader.toLowerCase() !== req.user.walletAddress.toLowerCase()) {
+    throw new ApiError(403, "Forbidden - Wallet mismatch");
+  }
+
+  next();
+});

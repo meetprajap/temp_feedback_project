@@ -58,7 +58,13 @@ export default function FeedbackApp() {
     const fetchDashboardStats = async () => {
       if (user && user.role === 'admin' && currentView === 'dashboard') {
         try {
-          const response = await fetch('http://localhost:4000/api/v1/course/dashboard/stats');
+          const authUser = user || JSON.parse(localStorage.getItem('user'));
+          const response = await fetch('http://localhost:4000/api/v1/course/dashboard/stats', {
+            headers: {
+              Authorization: `Bearer ${authUser?.token}`,
+              "x-wallet-address": authUser?.walletAddress || ""
+            }
+          });
           const data = await response.json();
           
           if (data.success) {
