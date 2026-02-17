@@ -16,10 +16,10 @@ import { User } from '../models/user.model.js';
 const FeedbackABIModule = require('../services/FeedbackABI.json');
 // FeedbackABI.json is an array directly, not an object with .abi property
 const FeedbackContractABI = Array.isArray(FeedbackABIModule) ? FeedbackABIModule : FeedbackABIModule.abi;
-const contractAddress = '0x321bb5D8dE6719410611752B53782371C305f205'; // Replace with your deployed address
+const contractAddress = '0x1ad358902c1551c66C396cd399948A7808ae478D'; // Replace with your deployed address
 
 // Assuming you have a default account/wallet configured to send transactions
-const adminAccount = '0xAAccd248bEF41DB260715973fD3b176B8fD2113C';
+const adminAccount = '0xe1cf778613474e0fe203264211346555bca2f58b';
 
 // Initialize contract only if web3 is properly configured
 let feedbackContract = null;

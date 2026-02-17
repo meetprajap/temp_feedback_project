@@ -53,6 +53,7 @@ const registerUser = requestHandler(async (req, res) => {
     email: email.trim().toLowerCase(),
     password: password,
     department: department.toUpperCase(),
+    branch: department.toUpperCase(),
     walletAddress: walletAddress || null
   });
   

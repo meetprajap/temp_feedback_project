@@ -1,12 +1,25 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
+import { useAccount, useDisconnect } from 'wagmi';
 import { CheckCircle, AlertTriangle, Loader, Wallet, ArrowLeft } from "lucide-react";
 
 export default function WalletConnectionPage({ onWalletConnected, userName, userRole, notification, userEmail, onBackToLogin, isNewRegistration = false, registeredWallet = null }) {
   const { address: walletAddress, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
   const [isProcessing, setIsProcessing] = useState(false);
   const hasProcessed = useRef(false);
+  const didForceDisconnect = useRef(false);
+
+  useEffect(() => {
+    if (!didForceDisconnect.current) {
+      if (isConnected) {
+        disconnect();
+      }
+      didForceDisconnect.current = true;
+      hasProcessed.current = false;
+      setIsProcessing(false);
+    }
+  }, [disconnect, isConnected]);
 
   // Auto-trigger wallet connection callback when wallet is connected
   useEffect(() => {

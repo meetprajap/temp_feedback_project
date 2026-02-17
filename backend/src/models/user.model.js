@@ -18,6 +18,19 @@ const UserSchema = new Schema(
     trim: true,
     index: true
   },
+  role: {
+    type: String,
+    enum: ['student', 'teacher', 'admin'],
+    default: 'student'
+  },
+  department: {
+    type: String,
+    trim: true
+  },
+  branch: {
+    type: String,
+    trim: true
+  },
  
  
   password: {

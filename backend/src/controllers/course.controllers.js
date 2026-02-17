@@ -343,9 +343,25 @@ const getDashboardStats = requestHandler(async (req, res) => {
   try {
     const { User } = await import('../models/user.model.js');
     
-    // Get total students and teachers from MongoDB
-    const totalStudents = await User.countDocuments({ role: 'student' });
-    const totalTeachers = await User.countDocuments({ role: 'teacher' });
+    // Get total students from MongoDB
+    const totalStudents = await User.countDocuments({
+      $or: [{ role: 'student' }, { role: { $exists: false } }]
+    });
+    // Prefer blockchain teacher count (unique teacherIds), fallback to DB role count
+    const courses = await getCoursesFromBlockchain();
+    const teacherIdSet = new Set();
+
+    courses.forEach((course) => {
+      (course.teachers || []).forEach((teacher) => {
+        if (teacher?.teacherId != null) {
+          teacherIdSet.add(String(teacher.teacherId));
+        }
+      });
+    });
+
+    const teacherCountFromBlockchain = teacherIdSet.size;
+    const teacherCountFromDb = await User.countDocuments({ role: 'teacher' });
+    const totalTeachers = Math.max(teacherCountFromBlockchain, teacherCountFromDb);
     
     // Get all feedbacks from blockchain
     const allFeedbacks = await getAllFeedbacksFromBlockchain();

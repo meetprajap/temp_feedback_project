@@ -21,7 +21,7 @@ export default function FeedbackResults() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [expandedCourse, setExpandedCourse] = useState(null);
+  const [expandedCourseKey, setExpandedCourseKey] = useState(null);
   const [courseResults, setCourseResults] = useState({});
   const [loadingResults, setLoadingResults] = useState({});
   const [viewMode, setViewMode] = useState("summary"); // "summary" or "detailed"
@@ -121,11 +121,14 @@ export default function FeedbackResults() {
     }
   };
 
+  const getCourseEntryKey = (course) => String(course.courseId);
+
   const toggleCourse = (course) => {
-    if (expandedCourse?.courseId === course.courseId) {
-      setExpandedCourse(null);
+    const entryKey = getCourseEntryKey(course);
+    if (expandedCourseKey === entryKey) {
+      setExpandedCourseKey(null);
     } else {
-      setExpandedCourse(course);
+      setExpandedCourseKey(entryKey);
       // Fetch results if not already fetched
       const teachers = course.teachers || [];
       const needsSync = teachers.some((t) => {
@@ -139,6 +142,43 @@ export default function FeedbackResults() {
       }
     }
   };
+
+  const groupedCourses = React.useMemo(() => {
+    const byCourseId = new Map();
+    courses.forEach((course) => {
+      const courseId = course.courseId;
+      if (!byCourseId.has(courseId)) {
+        byCourseId.set(courseId, {
+          courseId: course.courseId,
+          courseName: course.courseName,
+          branch: course.branch,
+          teachers: []
+        });
+      }
+
+      const entry = byCourseId.get(courseId);
+      const incomingTeachers = course.teachers && course.teachers.length > 0
+        ? course.teachers
+        : [{
+            teacherId: course.teacherId,
+            teacherName: course.teacherName,
+            name: course.teacherName
+          }];
+
+      incomingTeachers.forEach((teacher) => {
+        const teacherId = teacher.teacherId || teacher.id;
+        if (!teacherId) {
+          return;
+        }
+        const exists = entry.teachers.some((t) => (t.teacherId || t.id) === teacherId);
+        if (!exists) {
+          entry.teachers.push(teacher);
+        }
+      });
+    });
+
+    return Array.from(byCourseId.values());
+  }, [courses]);
 
   const getRatingColor = (score) => {
     if (score >= 4.5) return "text-emerald-400";
@@ -365,7 +405,7 @@ export default function FeedbackResults() {
             )}
           </div>
         </div>
-      ) : courses.length === 0 ? (
+      ) : groupedCourses.length === 0 ? (
         /* NO COURSES */
         <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 text-center">
           <AlertCircle className="w-12 h-12 text-slate-500 mx-auto mb-3" />
@@ -374,9 +414,11 @@ export default function FeedbackResults() {
       ) : (
         /* SUMMARY VIEW - Course-wise Teacher Averages */
         <div className="space-y-4">
-          {courses.map((course) => (
+          {groupedCourses.map((course) => {
+            const entryKey = getCourseEntryKey(course);
+            return (
             <div
-              key={course.courseId}
+              key={entryKey}
               className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden hover:border-indigo-500 transition-all"
             >
               {/* Course Header */}
@@ -399,15 +441,13 @@ export default function FeedbackResults() {
                 </div>
                 <ChevronRight
                   className={`w-5 h-5 text-slate-400 transition-transform ${
-                    expandedCourse?.courseId === course.courseId
-                      ? "rotate-90"
-                      : ""
+                    expandedCourseKey === entryKey ? "rotate-90" : ""
                   }`}
                 />
               </button>
 
               {/* Course Results */}
-              {expandedCourse?.courseId === course.courseId && (
+              {expandedCourseKey === entryKey && (
                 <div className="border-t border-slate-700 bg-slate-800/50 p-6">
                   {loadingResults[course.courseId] ? (
                     <div className="flex justify-center items-center py-8">
@@ -492,7 +532,8 @@ export default function FeedbackResults() {
                 </div>
               )}
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
     </div>

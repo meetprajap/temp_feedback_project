@@ -13,6 +13,16 @@ export default function FeedbackReport() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const uniqueCourses = React.useMemo(() => {
+    const byCourseId = new Map();
+    courses.forEach((course) => {
+      if (course?.courseId != null && !byCourseId.has(course.courseId)) {
+        byCourseId.set(course.courseId, course);
+      }
+    });
+    return Array.from(byCourseId.values());
+  }, [courses]);
+
   // Fetch available courses on mount and load all feedback
   useEffect(() => {
     const fetchCoursesAndAllFeedback = async () => {
@@ -31,7 +41,10 @@ export default function FeedbackReport() {
       // Fetch all submission tracking by default
       try {
         const token = JSON.parse(localStorage.getItem('user'))?.token;
+        console.log('🔑 Token exists:', !!token);
+        
         if (token) {
+          console.log('📡 Fetching submission tracking from:', `${API_BASE_URL}/submission-tracking`);
           const response = await fetch(
             `${API_BASE_URL}/submission-tracking`,
             {
@@ -42,17 +55,22 @@ export default function FeedbackReport() {
           );
 
           const data = await response.json();
+          console.log('📦 Response:', data);
 
           if (data.success) {
+            console.log('✅ Got', data.data.feedbacks?.length, 'submissions');
             // Data already in correct format from MongoDB
             setAllFeedbackData(data.data.feedbacks);
             setViewMode("all"); // Set default view to all
+            console.log('✅ ViewMode set to ALL');
           } else {
-            console.error("Failed to load feedback data");
+            console.error("❌ Failed to load feedback data:", data.message);
           }
+        } else {
+          console.log('⚠️ No authentication token found');
         }
       } catch (err) {
-        console.error("Error fetching all feedback:", err);
+        console.error("❌ Error fetching all feedback:", err);
       }
     };
 
@@ -61,7 +79,7 @@ export default function FeedbackReport() {
 
   // Fetch feedback for selected course
   const handleCourseSelect = async (course) => {
-    setSelectedCourse(course._id); // Use unique MongoDB _id
+    setSelectedCourse(course.courseId);
     setLoading(true);
     setError("");
     
@@ -193,15 +211,15 @@ export default function FeedbackReport() {
                   Courses
                 </div>
                 <div className="divide-y max-h-96 overflow-y-auto">
-                  {courses.length === 0 ? (
+                  {uniqueCourses.length === 0 ? (
                     <p className="p-4 text-slate-500 text-sm">No courses available</p>
                   ) : (
-                    courses.map((course) => (
+                    uniqueCourses.map((course) => (
                       <button
-                        key={course._id}
+                        key={course.courseId}
                         onClick={() => handleCourseSelect(course)}
                         className={`w-full text-left p-4 transition-colors ${
-                          selectedCourse === course._id
+                          selectedCourse === course.courseId
                             ? "bg-blue-50 border-l-4 border-blue-600"
                             : "hover:bg-slate-50"
                         }`}
