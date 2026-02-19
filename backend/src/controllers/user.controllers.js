@@ -481,7 +481,11 @@ const linkWallet = requestHandler(async (req, res) => {
   if (user.role !== "admin") {
     try {
       const transactionHash = await addStudent(walletAddress.toLowerCase(), user.fullName, walletAddress.toLowerCase());
-      console.log("✅ Student registered on blockchain:", transactionHash);
+      if (transactionHash) {
+        console.log("✅ Student registered on blockchain:", transactionHash);
+      } else {
+        console.log("ℹ️ Student already existed on blockchain. Wallet link completed without new transaction.");
+      }
     } catch (blockchainError) {
       console.error("❌ Blockchain registration failed:", blockchainError.message);
       // Remove wallet from user if blockchain registration fails

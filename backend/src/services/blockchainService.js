@@ -16,7 +16,7 @@ import { User } from '../models/user.model.js';
 const FeedbackABIModule = require('../services/FeedbackABI.json');
 // FeedbackABI.json is an array directly, not an object with .abi property
 const FeedbackContractABI = Array.isArray(FeedbackABIModule) ? FeedbackABIModule : FeedbackABIModule.abi;
-const contractAddress = process.env.CONTRACT_ADDRESS || '0xCF0E1579D9389b51c5D7e3d64E6c987eD735FeCe'; // Replace with your deployed address
+const contractAddress = process.env.CONTRACT_ADDRESS || '0x4758cbf7cc98D0F39D1D46E34Aed0E2f5ef043c3'; // Replace with your deployed address
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "23ceubg1@ddu.ac.in";
 
 if (process.env.ADMIN_PRIVATE_KEY) {
@@ -156,20 +156,57 @@ const addStudent = async (walletAddress, studentName, fromWallet = null) => {
       throw new Error("Feedback contract not initialized");
     }
 
+    if (!walletAddress) {
+      throw new Error("walletAddress is required");
+    }
+
+    const normalizedWallet = walletAddress.toLowerCase();
+
     console.log(`📝 Registering student on blockchain:`, {
-      wallet: walletAddress,
+      wallet: normalizedWallet,
       name: studentName
     });
 
+    if (feedbackContract.methods?.isStudentRegistered) {
+      const alreadyRegistered = await feedbackContract.methods
+        .isStudentRegistered(normalizedWallet)
+        .call();
+
+      if (alreadyRegistered) {
+        console.log('ℹ️ Student already registered on blockchain, skipping addStudent transaction');
+        return null;
+      }
+    }
+
     // Call smart contract addStudent(wallet, name)
-    const senderWallet = fromWallet || walletAddress;
-    const receipt = await feedbackContract.methods.addStudent(walletAddress, studentName)
-      .send({ from: senderWallet, gasLimit: 300000 });
+    let senderWallet = null;
+
+    if (fromWallet) {
+      try {
+        senderWallet = await resolvePreferredSender(fromWallet, "Student sender");
+      } catch (senderError) {
+        console.warn(`⚠️ ${senderError.message}. Falling back to admin sender.`);
+      }
+    }
+
+    if (!senderWallet) {
+      senderWallet = await resolveAdminSender();
+    }
+
+    const receipt = await feedbackContract.methods.addStudent(normalizedWallet, studentName)
+      .send({ from: senderWallet, gas: 300000 });
 
     console.log('✅ Student registered on blockchain! Hash:', receipt.transactionHash);
     return receipt.transactionHash;
 
   } catch (error) {
+    const lowerMessage = (error?.message || '').toLowerCase();
+
+    if (lowerMessage.includes('student already registered') || lowerMessage.includes('already registered')) {
+      console.log('ℹ️ Student already registered on blockchain (from tx revert), continuing without failure');
+      return null;
+    }
+
     console.error('❌ Error executing smart contract transaction:', error);
     throw new Error(`Blockchain transaction failed: ${error.message}`);
   }

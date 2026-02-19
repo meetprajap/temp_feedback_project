@@ -1,25 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount, useDisconnect } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { CheckCircle, AlertTriangle, Loader, Wallet, ArrowLeft } from "lucide-react";
 
 export default function WalletConnectionPage({ onWalletConnected, userName, userRole, notification, userEmail, onBackToLogin, isNewRegistration = false, registeredWallet = null }) {
   const { address: walletAddress, isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
   const [isProcessing, setIsProcessing] = useState(false);
   const hasProcessed = useRef(false);
-  const didForceDisconnect = useRef(false);
-
-  useEffect(() => {
-    if (!didForceDisconnect.current) {
-      if (isConnected) {
-        disconnect();
-      }
-      didForceDisconnect.current = true;
-      hasProcessed.current = false;
-      setIsProcessing(false);
-    }
-  }, [disconnect, isConnected]);
 
   // Auto-trigger wallet connection callback when wallet is connected
   useEffect(() => {
@@ -45,25 +32,31 @@ export default function WalletConnectionPage({ onWalletConnected, userName, user
             className={`fixed top-6 right-6 px-6 py-4 rounded-xl shadow-2xl z-50 flex items-center space-x-4 text-white transform transition-all animate-in slide-in-from-bottom duration-500 border ${
               notification.type === "success"
                 ? "bg-emerald-900/90 border-emerald-500"
-                : "bg-red-900/90 border-red-500"
+                : notification.type === "info"
+                  ? "bg-blue-900/90 border-blue-500"
+                  : "bg-red-900/90 border-red-500"
             }`}
           >
             <div
               className={`p-2 rounded-full ${
                 notification.type === "success"
                   ? "bg-emerald-500"
-                  : "bg-red-500"
+                  : notification.type === "info"
+                    ? "bg-blue-500"
+                    : "bg-red-500"
               }`}
             >
               {notification.type === "success" ? (
                 <CheckCircle className="w-5 h-5 text-white" />
+              ) : notification.type === "info" ? (
+                <Wallet className="w-5 h-5 text-white" />
               ) : (
                 <AlertTriangle className="w-5 h-5 text-white" />
               )}
             </div>
             <div>
               <p className="font-bold text-sm">
-                {notification.type === "success" ? "Success" : "Error"}
+                {notification.type === "success" ? "Success" : notification.type === "info" ? "Info" : "Error"}
               </p>
               <p className="text-xs opacity-90">{notification.msg}</p>
             </div>

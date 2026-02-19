@@ -192,7 +192,6 @@ export default function FeedbackApp() {
           
           // Check if wallet is connected
           if (!isConnected || !walletAddress) {
-            showNotification("info", `Please connect your registered wallet: ${userData.walletAddress.slice(0, 6)}...${userData.walletAddress.slice(-4)}`);
             setPendingUser({ 
               role, 
               id, 
@@ -247,7 +246,6 @@ export default function FeedbackApp() {
           
         } else {
           // Existing user without wallet - require wallet connection
-          showNotification("info", "Please connect your wallet to complete account setup");
           setPendingUser({ 
             role, 
             id, 
