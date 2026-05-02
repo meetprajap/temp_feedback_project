@@ -3,13 +3,28 @@ import ApiResponse from '../utils/ApiResponse.js';
 import requestHandler from '../utils/asyncHandler.js';
 import { createCourseblock, getTeacherCourseAveragesFromBlockchain, getCourseFromBlockchain, getCoursesFromBlockchain, getCourseTeachersFromBlockchain, getAllFeedbacksFromBlockchain } from '../services/blockchainService.js';
 
+const BRANCH_NORMALIZATION_MAP = {
+  ce: 'CE',
+  it: 'IT',
+  ec: 'EC',
+  me: 'ME',
+  civil: 'Civil'
+};
+
+const normalizeBranch = (value) => {
+  if (!value) return null;
+  const normalized = BRANCH_NORMALIZATION_MAP[String(value).trim().toLowerCase()];
+  return normalized || null;
+};
+
 // Create a new course (Admin only) - Send only to blockchain
 const createCourse = requestHandler(async (req, res) => {
-  const { courseId, courseName, teachers, branch, courseTime } = req.body;
+  const { courseId, courseName, teachers, branch } = req.body;
+  const normalizedBranch = normalizeBranch(branch);
 
   // Validate all fields are provided
-  if (!courseId || !courseName || !teachers) {
-    throw new ApiError(400, "courseId, courseName, and teachers are required");
+  if (!courseId || !courseName || !teachers || !normalizedBranch) {
+    throw new ApiError(400, "courseId, courseName, teachers, and valid branch are required");
   }
 
   // Validate teachers array
@@ -39,6 +54,7 @@ const createCourse = requestHandler(async (req, res) => {
     const txHash = await createCourseblock({
       courseId: courseId.toString(),
       courseName: courseName,
+      branch: normalizedBranch,
       teachers: teachersData
     }, req.user?.walletAddress || null);
 
@@ -50,8 +66,7 @@ const createCourse = requestHandler(async (req, res) => {
     return res.status(201).json(
       new ApiResponse(201, {
         ...createdCourse,
-        branch: branch,
-        courseTime: courseTime,
+        branch: normalizedBranch,
         txHash: txHash
       }, "Course created successfully on blockchain")
     );
@@ -71,6 +86,8 @@ const getAllCourses = requestHandler(async (req, res) => {
     const expandedCourses = [];
     
     for (const course of courses) {
+      const branch = course.branch || null;
+
       // Expand courses: create one entry per teacher
       if (course.teachers && course.teachers.length > 0) {
         course.teachers.forEach(teacher => {
@@ -79,11 +96,15 @@ const getAllCourses = requestHandler(async (req, res) => {
             courseName: course.courseName,
             teacherId: teacher.teacherId,
             teacherName: teacher.teacherName,
+            branch,
             teachers: [teacher] // Single teacher per expanded entry
           });
         });
       } else {
-        expandedCourses.push(course);
+        expandedCourses.push({
+          ...course,
+          branch
+        });
       }
     }
 
@@ -127,22 +148,26 @@ const deleteCourse = requestHandler(async (req, res) => {
 // Get courses by branch - Fetches from blockchain with courseIds
 const getCoursesByBranch = requestHandler(async (req, res) => {
   const { branch } = req.params;
+  const normalizedBranch = normalizeBranch(branch);
+
+  if (!normalizedBranch) {
+    throw new ApiError(400, 'Invalid branch. Use CE, IT, EC, ME, or Civil');
+  }
   
   try {
     // Fetch all courses from blockchain (blockchain tracks all courseIds now)
     const courses = await getCoursesFromBlockchain();
+    const filteredCourses = courses
+      .filter((course) => normalizeBranch(course.branch) === normalizedBranch)
+      .map((course) => ({
+        ...course,
+        branch: normalizedBranch
+      }));
     
-    console.log(`✅ Retrieved ${courses.length} courses from blockchain for branch: ${branch}`);
-    
-    // Attach requested branch so frontend filtering works
-    const coursesWithBranch = courses.map(course => ({
-      ...course,
-      branch: branch
-    }));
+    console.log(`✅ Retrieved ${filteredCourses.length} courses from blockchain for branch: ${normalizedBranch}`);
 
-    // Return all courses - blockchain doesn't store branch/department information
     return res.status(200).json(
-      new ApiResponse(200, coursesWithBranch, `Courses retrieved from blockchain. Total: ${coursesWithBranch.length}`)
+      new ApiResponse(200, filteredCourses, `Courses retrieved from blockchain. Total: ${filteredCourses.length}`)
     );
   } catch (error) {
     console.error(`❌ Error fetching courses:`, error.message);

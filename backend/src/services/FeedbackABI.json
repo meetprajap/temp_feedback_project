@@ -47,6 +47,25 @@
 		"inputs": [
 			{
 				"indexed": false,
+				"internalType": "string",
+				"name": "courseId",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "department",
+				"type": "string"
+			}
+		],
+		"name": "CourseDepartmentSet",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "id",
 				"type": "uint256"
@@ -435,6 +454,25 @@
 	{
 		"inputs": [
 			{
+				"internalType": "string",
+				"name": "_courseId",
+				"type": "string"
+			}
+		],
+		"name": "getCourseDepartment",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
 				"internalType": "address",
 				"name": "_wallet",
 				"type": "address"
@@ -540,6 +578,24 @@
 			}
 		],
 		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_courseId",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_department",
+				"type": "string"
+			}
+		],
+		"name": "setCourseDepartment",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{

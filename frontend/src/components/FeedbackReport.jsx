@@ -345,9 +345,6 @@ export default function FeedbackReport() {
                   <thead>
                     <tr className="bg-slate-100 border-b">
                       <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                        ID
-                      </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
                         Student Name
                       </th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
@@ -370,9 +367,6 @@ export default function FeedbackReport() {
                   <tbody>
                     {allFeedbackData.map((feedback) => (
                       <tr key={feedback.id} className="border-b hover:bg-slate-50">
-                        <td className="px-6 py-3 text-sm text-slate-900 font-mono">
-                          #{feedback.id}
-                        </td>
                         <td className="px-6 py-3 text-sm text-slate-900 font-medium">
                           {feedback.studentName}
                         </td>

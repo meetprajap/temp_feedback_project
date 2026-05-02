@@ -132,7 +132,7 @@ export default function FeedbackModal({ selectedCourse, onClose, onSubmit, isMin
               <div className="mt-6">
                 <label className="text-sm font-bold text-slate-800 mb-2 block">Additional Comments (Encrypted)</label>
                 <textarea 
-                  className="w-full border border-slate-300 rounded-xl p-4 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow" 
+                  className="w-full bg-white border border-slate-300 rounded-xl p-4 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow" 
                   rows="3" 
                   placeholder="Write your honest review here..."
                   value={comment} 

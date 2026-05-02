@@ -59,6 +59,7 @@ contract FeedbackSystem {
     mapping(address => Student) public students; // wallet => Student
     mapping(string => Teacher) public teachers;
     mapping(string => Course) public courses;
+    mapping(string => string) private courseDepartments;
 
     // courseId => teacherId => assigned?
     mapping(string => mapping(string => bool)) public courseTeachers;
@@ -79,6 +80,7 @@ contract FeedbackSystem {
     event StudentAdded(address wallet, string name);
     event TeacherAdded(string teacherId, string name);
     event CourseAdded(string courseId, string courseName);
+    event CourseDepartmentSet(string courseId, string department);
     event TeacherAssignedToCourse(string courseId, string teacherId);
     event FeedbackSubmitted(uint256 id, string facultyId);
     event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
@@ -147,6 +149,26 @@ contract FeedbackSystem {
 
     function getCourseCount() external view returns (uint256) {
         return courseIds.length;
+    }
+
+    function setCourseDepartment(
+        string memory _courseId,
+        string memory _department
+    ) external onlyAdmin {
+        require(courses[_courseId].exists, "Course not found");
+        require(bytes(_department).length > 0, "Department is required");
+
+        courseDepartments[_courseId] = _department;
+        emit CourseDepartmentSet(_courseId, _department);
+    }
+
+    function getCourseDepartment(string memory _courseId)
+        external
+        view
+        returns (string memory)
+    {
+        require(courses[_courseId].exists, "Course not found");
+        return courseDepartments[_courseId];
     }
 
     function assignTeacherToCourse(

@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Star,
   MessageSquare,
-  Calendar,
   User,
   Filter,
   ChevronDown,
@@ -27,6 +26,20 @@ export default function FeedbackResults() {
   const [viewMode, setViewMode] = useState("summary"); // "summary" or "detailed"
   const [filterCourse, setFilterCourse] = useState("all");
   const [filterTeacher, setFilterTeacher] = useState("all");
+
+  const normalizeId = (value) => String(value ?? "");
+  const getResultMessage = (message) => {
+    const text = String(message || "").toLowerCase();
+    if (
+      !text ||
+      text.includes("no feedback") ||
+      text.includes("execute a function inside a smart contract") ||
+      text.includes("revert")
+    ) {
+      return "No feedback submitted yet.";
+    }
+    return message;
+  };
 
   useEffect(() => {
     fetchCourses();
@@ -107,7 +120,7 @@ export default function FeedbackResults() {
           if (data.success) {
             results[key] = data.data;
           } else {
-            results[key] = { error: data.message || "No feedback data" };
+            results[key] = { error: getResultMessage(data.message) };
             console.error(`❌ API error for ${key}:`, data.message);
           }
         } catch (err) {
@@ -115,7 +128,7 @@ export default function FeedbackResults() {
             `❌ Network error fetching results for ${courseId}-${teacherId}:`,
             err
           );
-          results[key] = { error: "Failed to fetch results" };
+          results[key] = { error: getResultMessage(err?.message || "") };
         }
       }
 
@@ -184,6 +197,32 @@ export default function FeedbackResults() {
     return Array.from(byCourseId.values());
   }, [courses]);
 
+  const courseNameById = React.useMemo(() => {
+    const map = new Map();
+    groupedCourses.forEach((course) => {
+      map.set(normalizeId(course.courseId), course.courseName || "Unknown Course");
+    });
+    return map;
+  }, [groupedCourses]);
+
+  const teacherNameByKey = React.useMemo(() => {
+    const map = new Map();
+    groupedCourses.forEach((course) => {
+      (course.teachers || []).forEach((teacher) => {
+        const teacherId = normalizeId(teacher.teacherId || teacher.id);
+        if (!teacherId) return;
+
+        const teacherName = teacher.teacherName || teacher.name || "Unknown Teacher";
+        map.set(`${normalizeId(course.courseId)}-${teacherId}`, teacherName);
+
+        if (!map.has(`global-${teacherId}`)) {
+          map.set(`global-${teacherId}`, teacherName);
+        }
+      });
+    });
+    return map;
+  }, [groupedCourses]);
+
   const getRatingColor = (score) => {
     if (score >= 4.5) return "text-emerald-400";
     if (score >= 4) return "text-blue-400";
@@ -198,16 +237,51 @@ export default function FeedbackResults() {
     return "bg-red-900/30 border-red-600/50";
   };
 
+  // Build course-aware teacher options first
+  const courseScopedFeedbacks = allFeedbacks.filter((fb) => {
+    if (filterCourse === "all") return true;
+    return normalizeId(fb.courseId) === normalizeId(filterCourse);
+  });
+
   // Filter feedbacks based on selected course and teacher
-  const filteredFeedbacks = allFeedbacks.filter(fb => {
-    if (filterCourse !== "all" && fb.courseId !== filterCourse) return false;
-    if (filterTeacher !== "all" && fb.teacherId !== filterTeacher) return false;
+  const filteredFeedbacks = courseScopedFeedbacks.filter((fb) => {
+    if (filterTeacher !== "all" && normalizeId(fb.teacherId) !== normalizeId(filterTeacher)) return false;
     return true;
   });
 
-  // Get unique courses and teachers for filters
-  const uniqueCourses = [...new Set(allFeedbacks.map(fb => fb.courseId))];
-  const uniqueTeachers = [...new Set(allFeedbacks.map(fb => fb.teacherId))];
+  // Get unique courses from created course list (not only submitted feedback)
+  const uniqueCourses = [...new Set(groupedCourses.map((course) => normalizeId(course.courseId)))];
+
+  // Get teachers from selected course (or all courses when "all" is selected)
+  const uniqueTeachers = React.useMemo(() => {
+    const extractTeacherIds = (course) => {
+      const teachers = course?.teachers || [];
+      return teachers
+        .map((teacher) => normalizeId(teacher.teacherId || teacher.id))
+        .filter(Boolean);
+    };
+
+    if (filterCourse === "all") {
+      return [...new Set(groupedCourses.flatMap((course) => extractTeacherIds(course)))];
+    }
+
+    const selectedCourse = groupedCourses.find(
+      (course) => normalizeId(course.courseId) === normalizeId(filterCourse)
+    );
+
+    if (!selectedCourse) {
+      return [];
+    }
+
+    return [...new Set(extractTeacherIds(selectedCourse))];
+  }, [groupedCourses, filterCourse]);
+
+  useEffect(() => {
+    // If current teacher no longer belongs to selected course, reset to all
+    if (filterTeacher !== "all" && !uniqueTeachers.includes(normalizeId(filterTeacher))) {
+      setFilterTeacher("all");
+    }
+  }, [filterCourse, filterTeacher, uniqueTeachers]);
 
   return (
     <div className="w-full">
@@ -275,12 +349,14 @@ export default function FeedbackResults() {
               <label className="block text-sm text-slate-400 mb-2">Filter by Course</label>
               <select
                 value={filterCourse}
-                onChange={(e) => setFilterCourse(e.target.value)}
+                onChange={(e) => {
+                  setFilterCourse(e.target.value);
+                }}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-indigo-500 focus:outline-none"
               >
                 <option value="all">All Courses</option>
                 {uniqueCourses.map(courseId => (
-                  <option key={courseId} value={courseId}>Course {courseId}</option>
+                  <option key={courseId} value={courseId}>{courseId} - {courseNameById.get(normalizeId(courseId)) || "Unknown Course"}</option>
                 ))}
               </select>
             </div>
@@ -292,9 +368,18 @@ export default function FeedbackResults() {
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-indigo-500 focus:outline-none"
               >
                 <option value="all">All Teachers</option>
-                {uniqueTeachers.map(teacherId => (
-                  <option key={teacherId} value={teacherId}>Teacher {teacherId}</option>
-                ))}
+                {uniqueTeachers.map(teacherId => {
+                  const teacherName =
+                    filterCourse !== "all"
+                      ? teacherNameByKey.get(`${normalizeId(filterCourse)}-${normalizeId(teacherId)}`)
+                      : teacherNameByKey.get(`global-${normalizeId(teacherId)}`);
+
+                  return (
+                    <option key={teacherId} value={teacherId}>
+                      {teacherId} - {teacherName || "Unknown Teacher"}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -331,7 +416,16 @@ export default function FeedbackResults() {
                 <p className="text-slate-400">No feedbacks found</p>
               </div>
             ) : (
-              filteredFeedbacks.map((feedback) => (
+              filteredFeedbacks.map((feedback) => {
+                const courseId = normalizeId(feedback.courseId);
+                const teacherId = normalizeId(feedback.teacherId);
+                const courseName = courseNameById.get(courseId) || "Unknown Course";
+                const teacherName =
+                  teacherNameByKey.get(`${courseId}-${teacherId}`) ||
+                  teacherNameByKey.get(`global-${teacherId}`) ||
+                  "Unknown Teacher";
+
+                return (
                 <div
                   key={feedback.id}
                   className={`bg-slate-800 border-2 rounded-xl p-6 ${getRatingBg(feedback.averageScore)}`}
@@ -343,15 +437,11 @@ export default function FeedbackResults() {
                         <span className="px-3 py-1 bg-indigo-600/30 text-indigo-300 rounded-full text-xs font-semibold">
                           Feedback #{feedback.id}
                         </span>
-                        <span className="text-slate-400 text-sm flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {feedback.timestamp}
-                        </span>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-slate-400">
-                        <span>Course: <span className="text-white font-semibold">{feedback.courseId}</span></span>
+                        <span>Course: <span className="text-white font-semibold">{courseId}</span> <span className="text-slate-300">({courseName})</span></span>
                         <span>•</span>
-                        <span>Teacher: <span className="text-white font-semibold">{feedback.teacherId}</span></span>
+                        <span>Teacher: <span className="text-white font-semibold">{teacherId}</span> <span className="text-slate-300">({teacherName})</span></span>
                       </div>
                     </div>
                     <div className="text-right">
@@ -405,7 +495,7 @@ export default function FeedbackResults() {
                     </div>
                   )}
                 </div>
-              ))
+              )})
             )}
           </div>
         </div>
@@ -464,12 +554,13 @@ export default function FeedbackResults() {
                         const teacherId = teacher.teacherId || teacher.id;
                         const key = `${course.courseId}-${teacherId}`;
                         const result = courseResults[key];
+                        const noFeedbackYet = !result || !!result.error;
 
                         return (
                           <div
                             key={key}
                             className={`p-4 rounded-xl border ${
-                              result?.error
+                              noFeedbackYet
                                 ? "bg-slate-700/50 border-slate-600"
                                 : getRatingBg(result?.overallScore || 0)
                             }`}
@@ -488,8 +579,8 @@ export default function FeedbackResults() {
                             </div>
 
                             {/* Error Message */}
-                            {result?.error ? (
-                              <p className="text-slate-400 text-sm">{result.error}</p>
+                            {noFeedbackYet ? (
+                              <p className="text-slate-400 text-sm">{getResultMessage(result?.error)}</p>
                             ) : (
                               <>
                                 {/* Rating Breakdown */}

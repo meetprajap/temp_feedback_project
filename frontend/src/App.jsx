@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   User,
   ChevronRight,
-  TrendingUp,
   Copy,
 } from "lucide-react";
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -553,9 +552,6 @@ export default function FeedbackApp() {
                   <p className="text-4xl font-extrabold text-white">
                     {dashboardStats ? dashboardStats.totalStudents : '...'}
                   </p>
-                  <div className="mt-4 flex items-center text-emerald-400 text-sm font-bold">
-                    <TrendingUp className="w-4 h-4 mr-1" /> +12% this week
-                  </div>
                 </div>
                 <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                   <p className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">

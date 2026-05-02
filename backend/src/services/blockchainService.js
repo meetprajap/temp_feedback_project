@@ -16,7 +16,7 @@ import { User } from '../models/user.model.js';
 const FeedbackABIModule = require('../services/FeedbackABI.json');
 // FeedbackABI.json is an array directly, not an object with .abi property
 const FeedbackContractABI = Array.isArray(FeedbackABIModule) ? FeedbackABIModule : FeedbackABIModule.abi;
-const contractAddress = process.env.CONTRACT_ADDRESS || '0x4758cbf7cc98D0F39D1D46E34Aed0E2f5ef043c3'; // Replace with your deployed address
+const contractAddress = process.env.CONTRACT_ADDRESS || '0xf40678FF6BA2c65e6509b43f9A7F209f6C194E36'; // Replace with your deployed address
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "23ceubg1@ddu.ac.in";
 
 if (process.env.ADMIN_PRIVATE_KEY) {
@@ -250,6 +250,74 @@ const addTeacher = async (teacherId, teacherName, fromWallet = null) => {
   }
 };
 
+const setCourseDepartmentOnBlockchain = async (courseId, department, fromWallet = null) => {
+  try {
+    if (!feedbackContract) {
+      throw new Error("Feedback contract not initialized");
+    }
+
+    if (!courseId || !department) {
+      throw new Error("courseId and department are required");
+    }
+
+    const adminWallet = await ensureAdminSender(fromWallet);
+    const data = web3.eth.abi.encodeFunctionCall(
+      {
+        name: 'setCourseDepartment',
+        type: 'function',
+        inputs: [
+          { type: 'string', name: '_courseId' },
+          { type: 'string', name: '_department' }
+        ]
+      },
+      [courseId.toString(), department.toString()]
+    );
+
+    const receipt = await web3.eth.sendTransaction({
+      from: adminWallet,
+      to: contractAddress,
+      data,
+      gas: 250000
+    });
+
+    return receipt?.transactionHash || null;
+  } catch (error) {
+    throw new Error(`Failed to set course department on blockchain: ${error.message}`);
+  }
+};
+
+const getCourseDepartmentFromBlockchain = async (courseId) => {
+  try {
+    if (!feedbackContract) {
+      throw new Error("Feedback contract not initialized");
+    }
+
+    const data = web3.eth.abi.encodeFunctionCall(
+      {
+        name: 'getCourseDepartment',
+        type: 'function',
+        inputs: [{ type: 'string', name: '_courseId' }]
+      },
+      [courseId.toString()]
+    );
+
+    const result = await web3.eth.call({
+      to: contractAddress,
+      data,
+      from: await resolveAdminCaller()
+    });
+
+    if (!result || result === '0x') {
+      return null;
+    }
+
+    return web3.eth.abi.decodeParameter('string', result);
+  } catch (error) {
+    console.warn(`⚠️ Could not read course department for ${courseId}:`, error.message);
+    return null;
+  }
+};
+
 const createCourseblock = async (course, fromWallet = null) => {
   try {
     if (!feedbackContract) {
@@ -258,6 +326,7 @@ const createCourseblock = async (course, fromWallet = null) => {
 
     const courseId = course.courseId.toString();
     const courseName = course.courseName;
+    const branch = course.branch;
     const teachers = course.teachers; // ARRAY of teacher objects with teacherId and teacherName
 
     console.log(`📚 Creating course on blockchain:`, {
@@ -312,6 +381,11 @@ const createCourseblock = async (course, fromWallet = null) => {
       });
 
     console.log("✅ Course added to blockchain:", receipt.transactionHash);
+
+    if (branch) {
+      await setCourseDepartmentOnBlockchain(courseId, branch, fromWallet);
+      console.log(`✅ Department ${branch} set for course ${courseId}`);
+    }
 
     // Assign ALL teachers to this course on blockchain
     if (Array.isArray(teachers) && teachers.length > 0) {
@@ -585,6 +659,7 @@ const getCourseFromBlockchain = async (courseId) => {
     return {
       courseId: courseData.courseId,
       courseName: courseData.courseName,
+      branch: await getCourseDepartmentFromBlockchain(courseId),
       teachers: teachers
     };
   } catch (error) {
@@ -664,4 +739,4 @@ const getCourseTeachersFromBlockchain = async (courseId) => {
   }
 };
 
-export { addStudent, addTeacher, createCourseblock, submitFeedback, submitFeedbackLogic, getTempFeedbackStorage, clearTempFeedbackStorage, getTeacherCourseAveragesFromBlockchain, getAllFeedbacksFromBlockchain, getCourseFromBlockchain, getCoursesFromBlockchain, getCourseTeachersFromBlockchain, ensureAdminOnChain };
+export { addStudent, addTeacher, createCourseblock, submitFeedback, submitFeedbackLogic, getTempFeedbackStorage, clearTempFeedbackStorage, getTeacherCourseAveragesFromBlockchain, getAllFeedbacksFromBlockchain, getCourseFromBlockchain, getCoursesFromBlockchain, getCourseTeachersFromBlockchain, ensureAdminOnChain, getCourseDepartmentFromBlockchain, setCourseDepartmentOnBlockchain };

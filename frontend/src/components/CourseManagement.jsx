@@ -26,7 +26,6 @@ export default function CourseManagement() {
     courseName: "",
     teachers: [{ id: "", name: "" }],
     branch: "",
-    courseTime: "",
   });
 
   // Fetch all courses
@@ -98,8 +97,8 @@ export default function CourseManagement() {
     setError("");
     setSuccess("");
 
-    if (!formData.courseId || !formData.courseName || !formData.branch || !formData.courseTime) {
-      setError("Course ID, Course Name, Department, and Time are required");
+    if (!formData.courseId || !formData.courseName || !formData.branch) {
+      setError("Course ID, Course Name, and Department are required");
       return;
     }
 
@@ -134,7 +133,6 @@ export default function CourseManagement() {
               teacherName: t.name.trim()
             })),
           branch: formData.branch,
-          courseTime: formData.courseTime,
         }),
       });
 
@@ -150,7 +148,6 @@ export default function CourseManagement() {
         courseName: "",
         teachers: [{ id: "", name: "" }],
         branch: "",
-        courseTime: "",
       });
       setEditingId(null);
       setShowForm(false);
@@ -169,7 +166,7 @@ export default function CourseManagement() {
     if (course.teachers && Array.isArray(course.teachers)) {
       teachers = course.teachers.map(t => ({
         id: typeof t === 'object' ? t.teacherId : t,
-        name: typeof t === 'object' ? t.name : "",
+        name: typeof t === 'object' ? (t.teacherName || t.name || "") : "",
       }));
     }
     
@@ -178,7 +175,6 @@ export default function CourseManagement() {
       courseName: course.courseName,
       teachers: teachers.length > 0 ? teachers : [{ id: "", name: "" }],
       branch: course.branch,
-      courseTime: course.courseTime,
     });
     setEditingId(course.courseId);
     setShowForm(true);
@@ -225,7 +221,6 @@ export default function CourseManagement() {
       courseName: "",
       teachers: [{ id: "", name: "" }],
       branch: "",
-      courseTime: "",
     });
     setError("");
   };
@@ -375,19 +370,6 @@ export default function CourseManagement() {
                 </select>
               </div>
 
-              {/* Course Time */}
-              <div>
-                <label className="block text-slate-300 font-semibold mb-2">
-                  Course Time
-                </label>
-                <input
-                  type="time"
-                  name="courseTime"
-                  value={formData.courseTime}
-                  onChange={handleInputChange}
-                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
               <div className="md:col-span-2 flex gap-4">
                 <button
                   type="submit"
@@ -433,7 +415,6 @@ export default function CourseManagement() {
                     <th className="px-6 py-4 text-left text-slate-300 font-semibold">Course Name</th>
                     <th className="px-6 py-4 text-left text-slate-300 font-semibold">Teachers</th>
                     <th className="px-6 py-4 text-left text-slate-300 font-semibold">Branch</th>
-                    <th className="px-6 py-4 text-left text-slate-300 font-semibold">Time</th>
                     <th className="px-6 py-4 text-left text-slate-300 font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -450,7 +431,7 @@ export default function CourseManagement() {
                           {course.teachers && course.teachers.length > 0 ? (
                             course.teachers.map((teacher, idx) => (
                               <span key={idx} className="inline-block px-3 py-1 bg-green-900/50 text-green-300 rounded-full text-sm font-semibold">
-                                {typeof teacher === 'object' ? `${teacher.teacherId} (${teacher.name})` : teacher}
+                                {typeof teacher === 'object' ? `${teacher.teacherId} (${teacher.teacherName || teacher.name || 'N/A'})` : teacher}
                               </span>
                             ))
                           ) : (
@@ -463,7 +444,6 @@ export default function CourseManagement() {
                           {course.branch}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-slate-300">{course.courseTime}</td>
                       <td className="px-6 py-4">
                         <div className="flex gap-2">
                           <button
